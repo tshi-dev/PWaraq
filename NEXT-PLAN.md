@@ -6,6 +6,9 @@ Open problem: Defender flags the installer (`Trojan:Win32/Wacatac.H!ml`, ML fals
 
 Rules unchanged: release gate (test + owner's clearance per release), owner is the git author, no secrets in sessions, EN+AR for every UI string, design audit green on 4 themes.
 
+
+**Owner decision 27 Oct 2026:** code signing (0.3) and the native iOS/App Store track (2.2–2.6) are **paused** — "leave the ipa and the signing for now". Memos kept for later: `Archive-2026-10-12/reviews/CODESIGN-MEMO-2026-10-27.md` (Artifact Signing not open to Saudi individuals → OV + SSL.com eSigner, ask first), `IOS-LICENCE-MEMO-2026-10-27.md` (MuPDF AGPL vs App Store → Artifex quote first). Defender: the beta 2 installer scans clean since 27 Oct (definitions 1.461.217.0). **PWA (2.1) is built** (waraq-next `7a8c62c`, site `992c639`/`9a4ae9a`, staged ZIP `db488c8e…`), waiting for the owner's "preview"/"live". Next work: Phase 1.
+
 ## Phase 0 — unblock the Windows download (this week, highest priority)
 | # | Step | Who | Done = |
 |---|---|---|---|
