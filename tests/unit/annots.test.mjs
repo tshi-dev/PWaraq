@@ -108,3 +108,15 @@ test('a sticky note keeps the place it was put on a turned page, and reads back 
     assert.ok(ic.n > 30 && seenW > 0, `icon at the put place, rotate ${rot}`);
   }
 });
+
+test('a mixed text box keeps its digits in order, and the baked text reads back as typed', () => {
+  for (const note of ['Total 450 ريال', 'مرحبا بالعالم']) {
+    const out = applyAnnots(m, blankPdf, [], [box(note)], fonts);
+    assert.ok(ink(out, [60, 300, 330, 350]).n > 50, "ink inside the rect: " + note + " " + JSON.stringify(ink(out, [60, 300, 330, 350])));
+    assert.equal(listAnnots(m, out)[0].note, note, 'the value stays the real text');
+    const d = m.Document.openDocument(out, 'application/pdf').asPDF(); d.bake(true, false); // the picture becomes page content, so its text can be read back
+    const baked = d.loadPage(0).toStructuredText().asText().replace(/\s+/g, ' ');
+    if (note.startsWith('Total')) assert.match(baked, /450/, 'digits are not reversed: ' + baked);
+    else assert.ok(baked.includes('مرحبا') || baked.includes('بالعالم'), 'Arabic reads back: ' + baked);
+  }
+});
