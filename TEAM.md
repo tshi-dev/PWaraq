@@ -23,3 +23,6 @@ Owner-only actions (never a session): double-click `build-signed.cmd`; Cloudflar
 
 ## Naming
 Session titles: `W: <area> — <one-line job>` (e.g. `W: Edit — white cover in Comment task`). Reports: `Archive-2026-10-12/reviews/<AREA>-<date>.md`.
+
+## Cleanup (owner, 27 Oct 2026)
+Archive every worker session within 4 hours of its report being checked (memos read, commits verified). If one refuses ("live work"), turn its Remote Control off and retry; if it still refuses, list it for the owner to archive from the sidebar.
