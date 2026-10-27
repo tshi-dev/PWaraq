@@ -23,9 +23,9 @@ Rules unchanged: release gate (test + owner's clearance per release), owner is t
 | 1.1 | Owner's own use: iPhone/iPad check of pwaraq.com/app (Portfolio, Edit), 3 real drawings through Edit white-cover, 2 scanned Arabic docs through OCR. Report problems in this chat; manager turns each into a Builder brief. | Owner |
 | 1.2 | Crash-log triage: once a week the manager asks a Tester to read reports that arrive at support@pwaraq.com / GitHub issues and reproduce the top 3. | Tester |
 | 1.3 | Ctrl+wheel zoom in the tasks that still lack it (Comment, Forms, Redact, OCR, Sign): give them the Viewer's zoom (one shared `zoomable` action) — one Builder, one spec `ctrlwheel.spec.ts` extended. | Builder |
-| 1.4 | Comment: Arabic text box drawn with Tajawal (today Helvetica → nothing). Reuse `annots.ts` Arabic picture path already used for FreeText. | Builder |
+| 1.4 | **Done 27 Oct** (was already in 392df73/31c041b; test 75791fa). Comment: Arabic text box drawn with Tajawal (today Helvetica → nothing). Reuse `annots.ts` Arabic picture path already used for FreeText. | Builder |
 | 1.5 | Edit on drawings: "Cover + type" in one gesture (draw the white box, the text box opens inside it, same size as the covered strip). Owner asked for easy drawing edits; this is the next step after the white cover. | Builder |
-| 1.6 | Save after Organize/Comment keeps protection (PLAN.md line 746 "Not yet"). | Builder |
+| 1.6 | **Done 27 Oct** (07a6e6e; note: opened with the owner password → saved with it as the open password too). Save after Organize/Comment keeps protection (PLAN.md line 746 "Not yet"). | Builder |
 | 1.7 | Beta 3 release when 1.3–1.6 land: full suite on the built app + Tester Chrome pass + owner's yes. | Manager + Releaser |
 
 ## Phase 2 — iPhone / iPad (start after beta 3; parallel with Phase 1 research)
