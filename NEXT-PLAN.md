@@ -40,6 +40,21 @@ Rules unchanged: release gate (test + owner's clearance per release), owner is t
 | 4.3 | **Layers** in Edit (owner): side-panel list of every object on the page (pictures, moved areas, text boxes, photos) with previews — click to select even when covered; Bring to front / Forward / Backward / Send to back; eye toggle to hide while editing; undo. Moved pictures/areas drawn at their chosen order (today: always on top). Parts inside one original picture become layers after Move area. | Builder **after 4.2** (same engine file) |
 | 4.4 | Beta 4 release: full suite, installer (owner double-click), Defender scan of the downloaded asset, Microsoft submission if flagged, owner's yes | Manager |
 
+
+## Start screen + modes (owner, 27 Oct 2026) — research: Archive-2026-10-12/reviews/PDF-MARKET-RESEARCH-2026-10-27.md
+New start screen: "Open or drop files" area + 8 mode tiles (Sign, Portfolio, Scan to text, Combine, Fill a form, Share safely, Drawings, Review) + Recent; EN+AR, phone = one column. Each mode opens the right task with the right settings.
+Research-ranked features per mode (owner to confirm order):
+| Mode | Feature from research | Effort |
+|---|---|---|
+| Fill a form | auto-detect fields → make a flat PDF fillable (CommonForms; check licence + ONNX) | M |
+| Share safely | "check before sharing": hidden text, metadata, fake-redaction audit + shrink | S–M |
+| Review | compare two PDFs (visual + text diff); comments list export | M |
+| Drawings | scale calibration, length/area/count measure, grid; + Layers (4.3), Move area | M |
+| Combine | bookmarks/TOC editor, page labels, split by bookmark | S–M |
+| Sign | timestamped/LTV signatures (PAdES-B-LT) + validation panel | M |
+| (later) | local AI summarise/translate (WebLLM, opt-in download); pen/handwriting notes; accessibility tagging | L |
+Moat: Arabic/RTL is still broken in pdf.js, Stirling, PDFCraft (issues cited in the memo) — keep proving Arabic quality in every new feature.
+
 ## Phase 2 — iPhone / iPad (start after beta 3; parallel with Phase 1 research)
 | # | Step | Who | Notes |
 |---|---|---|---|
