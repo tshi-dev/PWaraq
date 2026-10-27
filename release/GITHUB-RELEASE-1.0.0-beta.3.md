@@ -10,6 +10,8 @@ New in beta 3:
 
 Problems? https://www.pwaraq.com/support or support@pwaraq.com
 
+SHA-256 of the installer: `c9402b553e3c9ba5b94460242cc8f667bef37ebc2d6db82a62ea1ec331f45967`
+
 ---
 
 **ورق 1.0 — النسخة التجريبية 3: استوديو PDF للعربية والإنجليزية. ملفاتك لا تغادر جهازك.**
