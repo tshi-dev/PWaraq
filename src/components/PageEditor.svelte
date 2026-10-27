@@ -171,9 +171,16 @@
     };
     const up = () => {
       el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up);
-      if (box.w < 4 || box.h < 4) { objs = objs.filter((x) => x.id !== o.id); selected = null; } else record(before);
+      if (box.w < 4 || box.h < 4) { objs = objs.filter((x) => x.id !== o.id); selected = null; return; }
+      record(before);
+      if (box.kind === 'redact' && box.white) coverText(box);
     };
     el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+  }
+  // cover + type: a text box over a fresh white box (not recorded: undo takes the typing, then the box; left empty it goes away)
+  function coverText(box: Box) {
+    const sz = Math.min(48, Math.max(8, Math.round(box.h * 0.7))), t: Obj = { id: uid(), kind: 'text', text: '', size: sz, color: COLOURS[1][1], bold: false, align: i18n.lang === 'ar' ? 'right' : 'left', x: box.x, y: box.y, w: box.w, h: box.h };
+    objs.push(t); select(t.id); focusText(t.id);
   }
   // an existing line of text: a text box in its place, with its text, size, colour and weight; the box reaches the page
   // margin so a longer text stays on one line instead of wrapping onto the line below

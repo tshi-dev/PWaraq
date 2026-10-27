@@ -158,7 +158,7 @@ test('edit: a white cover box (drawings, scans) — what is under it is gone, it
   await page.getByRole('button', { name: 'Redact', exact: true }).last().click(); // a second box remembers White
   await page.mouse.move(b.x + 300 * s, b.y + 400 * s); await page.mouse.down();
   await page.mouse.move(b.x + 340 * s, b.y + 420 * s, { steps: 3 }); await page.mouse.up();
-  await expect(page.getByRole('button', { name: 'White', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.obj textarea')).toBeFocused(); // the second box is white too: its text box opened (left empty)
   await page.getByRole('button', { name: 'Save page' }).click();
   await expect(page.getByText('Changed — not saved yet')).toBeVisible();
   const file = await saved(page, () => page.getByRole('button', { name: 'Save' }).first().click());
@@ -167,6 +167,35 @@ test('edit: a white cover box (drawings, scans) — what is under it is gone, it
   expect(text).toContain('Keep this line');
   const pm = p.toPixmap(m.Matrix.identity, m.ColorSpace.DeviceGray, false);
   expect(pm.getPixels()[75 * pm.getWidth() + 100]).toBeGreaterThan(240); // inside the first box: white, not black
+});
+
+test('edit: cover + type — a white box opens a text box inside it; the old text is gone, the new text and a white box are saved; a black box opens none', async ({ page }) => {
+  await open(page, fixture('edit.pdf'));
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  await ready(page);
+  const s = await scale(page), b = (await page.locator('.editor .sheet').boundingBox())!;
+  const draw = async () => {
+    await page.getByRole('button', { name: 'Redact', exact: true }).last().click();
+    await page.mouse.move(b.x + 66 * s, b.y + 60 * s); await page.mouse.down();
+    await page.mouse.move(b.x + 240 * s, b.y + 88 * s, { steps: 5 }); await page.mouse.up();
+  };
+  await draw();
+  await expect(page.locator('.obj.redact')).toHaveCount(1);
+  await expect(page.locator('.obj textarea')).toHaveCount(0); // black: no text box
+  await page.getByRole('button', { name: 'White', exact: true }).click();
+  await page.keyboard.press('Delete');
+  await draw(); // white is remembered: the text box opens in the box
+  await expect(page.locator('.obj textarea')).toBeFocused();
+  await page.keyboard.type('SCHEDULE PANEL');
+  await page.getByRole('button', { name: 'Save page' }).click();
+  await expect(page.getByText('Changed — not saved yet')).toBeVisible();
+  const file = await saved(page, () => page.getByRole('button', { name: 'Save' }).first().click());
+  const p = m.Document.openDocument(file.bytes, 'application/pdf').loadPage(0), text = p.toStructuredText().asText();
+  expect(text).toContain('SCHEDULE PANEL');
+  expect(text).not.toContain('Old heading');
+  expect(text).toContain('Keep this line');
+  const pm = p.toPixmap(m.Matrix.identity, m.ColorSpace.DeviceGray, false);
+  expect(pm.getPixels()[86 * pm.getWidth() + 235]).toBeGreaterThan(240); // box area (away from the letters): white
 });
 
 test('page editor: zoom to 200 % and back to fit; the page stays whole and scrollable, text can still be placed', async ({ page }) => {
