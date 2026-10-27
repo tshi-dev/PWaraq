@@ -13,6 +13,7 @@
   import { startSession } from './lib/session';
   import { uid } from './lib/pages';
   import Notice from './components/Notice.svelte';
+  import IosHint from './components/IosHint.svelte';
   import CrashReport from './components/CrashReport.svelte';
   import * as crash from './lib/crashlog';
   import { reportProblem } from './lib/support';
@@ -228,7 +229,7 @@
 
 {#if doc}
   <Workspace {pool} sizes={doc.sizes} name={doc.name} bytes={doc.bytes} modified={doc.modified} password={doc.password} onOpen={pick} onClose={close} onSave={() => save()} onSaveAs={() => save(true)}
-    onReplace={(bytes) => show(bytes, doc!.name, true)} />
+    onReplace={(bytes, pw) => show(bytes, doc!.name, true, pw)} />
 {:else if portfolio}
   <Portfolio {pool} {portfolio} onClose={close} />
 {:else}
@@ -288,6 +289,7 @@
         </ul>
       {:else}<p class="muted">{t('noRecent')}</p>{/if}
     </section>
+    <IosHint />
     <p class="muted small privacy">{@html icon('shield')}{t('privacy')}</p>
     {#if isDesktop}
       <div class="updaterow">

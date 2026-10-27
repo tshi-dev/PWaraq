@@ -8,9 +8,10 @@
   import { t, type Key } from '../lib/i18n.svelte';
   import { icon } from '../lib/icons.js';
   import { lazyPage } from '../lib/lazy';
+  import { pageZoom } from '../lib/touch';
 
-  let { pool, sizes, bytes, changed = $bindable(false) }: { pool: EnginePool; sizes: { w: number; h: number }[]; bytes: Uint8Array; changed?: boolean } = $props();
-  const W = 720, k = (i: number) => W / sizes[i].w;
+  let { pool, sizes, bytes, password, changed = $bindable(false) }: { pool: EnginePool; sizes: { w: number; h: number }[]; bytes: Uint8Array; password?: string; changed?: boolean } = $props();
+  const W0 = 720; let W = $state(W0); const k = (i: number) => W / sizes[i].w;
   type Tool = 'select' | Kind;
   const TOOLS: [Tool, Key][] = [['select', 'cSelect'], ['highlight', 'cHighlight'], ['underline', 'cUnderline'], ['strike', 'cStrike'], ['ink', 'cPen'], ['square', 'cRect'], ['circle', 'cEllipse'], ['line', 'cLine'], ['arrow', 'cArrow'], ['text', 'cText'], ['note', 'cNote']];
   const COLORS: [string, Key][] = [['#f5c518', 'cYellow'], ['#d93a3a', 'cRed'], ['#15775d', 'cGreen'], ['#2f6fd6', 'cBlue'], ['#ee8a1c', 'cOrange'], ['#233c36', 'cDark']];
@@ -26,10 +27,10 @@
 
   onMount(async () => {
     try {
-      orig = await pool.tool<Annot[]>('annotlist', { bytes: bytes.slice() });
+      orig = await pool.tool<Annot[]>('annotlist', { bytes: bytes.slice(), password });
       items = structuredClone(orig);
       // the pages are drawn from a copy without these comments (they are drawn here, where they can be moved)
-      doc = (await pool.add(await pool.tool('annotapply', { bytes: bytes.slice(), remove: orig.map(src), add: [] }))).id;
+      doc = (await pool.add(await pool.tool('annotapply', { bytes: bytes.slice(), remove: orig.map(src), add: [], password }))).id;
     } catch { error = t('toolFailed'); }
   });
 
@@ -38,7 +39,7 @@
     const now = new Map(items.map((a) => [a.id, a])), was = new Map(orig.map((a) => [a.id, a])), same = (a: Annot, b: Annot) => JSON.stringify(a) === JSON.stringify(b);
     const remove = orig.filter((o) => !same(o, now.get(o.id) ?? ({} as Annot))).map(src);
     const add = items.filter((a) => !was.has(a.id) || !same(a, was.get(a.id)!)).map((a) => $state.snapshot(a));
-    return remove.length || add.length ? pool.tool<Uint8Array>('annotapply', { bytes: bytes.slice(), remove, add }) : bytes;
+    return remove.length || add.length ? pool.tool<Uint8Array>('annotapply', { bytes: bytes.slice(), remove, add, password }) : bytes;
   }
 
   // ---- undo: one step per action (a snapshot of the list before it)
@@ -157,11 +158,11 @@
 
 <svelte:window onkeydown={keys} />
 <div class="comment">
-  <section class="pages" aria-label={t('pages')}>
+  <section class="pages" aria-label={t('pages')} use:pageZoom={{ get: () => W, set: (v) => (W = v), min: W0 / 2, max: W0 * 3 }}>
     {#if doc >= 0}
       {#each sizes as s, i}
         <div class="sheet" style="width:{W}px;height:{s.h * k(i)}px">
-          <canvas use:lazy={i}></canvas>
+          <canvas use:lazy={[i, W]}></canvas>
           <div class="layer" class:draw={tool !== 'select'} role="application" aria-label="{t('page')} {i + 1}"
             onpointerdown={(e) => down(e, i)} onpointermove={move} onpointerup={up} onpointercancel={() => { g = null; draft = null; }}>
             <svg viewBox="0 0 {s.w} {s.h}" width="100%" height="100%">
@@ -255,7 +256,7 @@
 
 <style>
   .comment { height: 100%; display: grid; grid-template-columns: 1fr 340px; min-height: 0; }
-  .pages { display: flex; flex-direction: column; align-items: center; gap: var(--s-16); background: var(--canvas); padding: var(--s-24); overflow: auto; }
+  .pages { display: flex; flex-direction: column; align-items: safe center; gap: var(--s-16); background: var(--canvas); padding: var(--s-24); overflow: auto; }
   .sheet { position: relative; flex: none; background: #fff; box-shadow: var(--shadow); }
   .sheet canvas { width: 100%; height: 100%; display: block; }
   .layer { position: absolute; inset: 0; touch-action: none; user-select: none; }

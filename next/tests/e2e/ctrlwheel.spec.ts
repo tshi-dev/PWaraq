@@ -47,3 +47,36 @@ test('Organize: Ctrl + wheel makes the page cards bigger', async ({ page }) => {
   for (let i = 0; i < 3; i++) expect(await ctrlWheel(page.locator('.grid'))).toBe(true);
   await expect.poll(async () => (await card.boundingBox())!.width).toBeGreaterThan(before * 1.2);
 });
+
+// Comment, Forms, Redact, OCR, Sign: the page area zooms the page (Ctrl + wheel), not the web page
+for (const [task, root, sheet] of [['Comment', '.comment', '.comment .sheet'], ['Forms', '.forms', '.forms .sheet'], ['Redact', '.redact', '.redact .sheet'], ['OCR', '.ocr', '.ocr .sheet'], ['Sign', '.stage', '.stage .sheet']]) {
+  test(`${task}: Ctrl + wheel over the page makes the page wider`, async ({ page }) => {
+    await open(page);
+    await page.getByRole('button', { name: task, exact: true }).click();
+    const first = page.locator(sheet).first();
+    await expect(first).toBeVisible({ timeout: 30_000 });
+    const width = async () => (await first.boundingBox())!.width;
+    const before = await width();
+    expect(await ctrlWheel(page.locator(root + (task === 'Sign' ? '' : ' .pages')).first())).toBe(true);
+    await expect.poll(width).toBeGreaterThan(before * 1.1);
+    expect(await ctrlWheel(page.locator('nav.tasks:not(.phone)'))).toBe(false);
+  });
+}
+
+test('Redact: a box drawn after zooming lands on the same page spot', async ({ page }) => {
+  await open(page);
+  await page.getByRole('button', { name: 'Redact' }).click();
+  const sheet = page.locator('.redact .sheet').first();
+  await expect(sheet).toBeVisible();
+  await ctrlWheel(page.locator('.redact .pages'));
+  await expect.poll(async () => (await sheet.boundingBox())!.width).toBeGreaterThan(560);
+  await page.waitForTimeout(300);
+  const b = (await sheet.boundingBox())!;
+  // drag over the fractions (0.2, 0.1)–(0.5, 0.2) of the page, wherever the page is now
+  await page.mouse.move(b.x + b.width * 0.2, b.y + b.height * 0.1); await page.mouse.down();
+  await page.mouse.move(b.x + b.width * 0.5, b.y + b.height * 0.2, { steps: 4 }); await page.mouse.up();
+  const m = (await page.locator('.redact .mark').first().boundingBox())!;
+  expect((m.x - b.x) / b.width).toBeCloseTo(0.2, 2);
+  expect(m.width / b.width).toBeCloseTo(0.3, 2);
+  expect((m.y - b.y) / b.height).toBeCloseTo(0.1, 2);
+});

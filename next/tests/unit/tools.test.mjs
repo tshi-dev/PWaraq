@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import * as m from '../../engine/mupdf-wasm/dist/mupdf.js';
 import { assemble } from '../../src/lib/engine/assemble.ts';
-import { compress, protect, unlock, guardOf, sealLikeSource, pageNumbers, watermark } from '../../src/lib/engine/tools.ts';
+import { compress, protect, unlock, guardOf, sealLikeSource, pageNumbers, watermark, decrypt } from '../../src/lib/engine/tools.ts';
 
 const three = fs.readFileSync(new URL('../fixtures/three.pdf', import.meta.url));
 const font = (f) => new m.Font(f, fs.readFileSync(new URL('../../public/fonts/' + f + '.ttf', import.meta.url)));
@@ -105,6 +105,18 @@ test('protection follows copies: compress keeps it; stripping it needs the owner
   const copy = sealLikeSource(m, assemble(m, () => ({ doc: open(three), bytes: three }), { items: [{ doc: 1, page: 0 }] }), locked, 'own');
   assert.equal(open(copy).hasPermission('copy'), false);
   assert.ok(open(copy).authenticatePassword('own') & 4);
+});
+
+test('protection follows Save after Organize/Comment: decrypt for the work, sealLikeSource puts it back with the owner password', () => {
+  const plain = decrypt(m, locked, 'own');
+  assert.ok(!open(plain).needsPassword());
+  assert.equal(open(plain).countPages(), 3);
+  assert.throws(() => decrypt(m, locked, 'wrong'), /WRONG_PASSWORD/);
+  const back = sealLikeSource(m, assemble(m, () => ({ doc: open(plain), bytes: plain }), { items: [{ doc: 1, page: 0 }, { doc: 1, page: 2 }] }), locked, 'own');
+  const d = open(back);
+  assert.equal(d.countPages(), 2);
+  assert.equal(d.hasPermission('copy'), false);
+  assert.ok(open(back).authenticatePassword('own') & 4); // the typed owner password stays the owner's (and, as for every copy, opens the file)
 });
 
 // ---- page numbers in Arabic-Indic digits, sized by the page, readable on a dark page; a tiled watermark

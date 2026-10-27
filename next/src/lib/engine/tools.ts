@@ -152,6 +152,9 @@ export function sealLikeSource(m: typeof MuPDF, out: Uint8Array, src: Uint8Array
   return g ? sealLike(m, out, g) : out;
 }
 
+/** `bytes` opened with `password` and saved without encryption: what is worked on before `sealLike` puts the protection back. */
+export const decrypt = (m: typeof MuPDF, bytes: Uint8Array, password = '') => open(m, bytes, password).saveToBuffer('decrypt').asUint8Array().slice();
+
 /** Refuses an operation that would strip the password or limits of a file unless `password` is its owner password. */
 export function mayStrip(m: typeof MuPDF, bytes: Uint8Array, password = '') {
   const g = guardOf(m, bytes, password);

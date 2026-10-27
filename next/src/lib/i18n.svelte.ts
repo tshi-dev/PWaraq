@@ -378,6 +378,7 @@ const strings = {
   wrongPassphrase: ['Wrong passphrase.', 'عبارة المرور غير صحيحة.'], wrongPfx: ['The file password is wrong.', 'كلمة مرور الملف غير صحيحة.'],
   pfxUnsupported: ['This file uses a method Waraq cannot open. Export it again with AES-256.', 'يستخدم هذا الملف طريقة لا يستطيع ورق فتحها. صدِّره مجددًا بـ AES-256.'],
   pfxNoKey: ['No private key was found in this file.', 'لم يُعثر على مفتاح خاص في هذا الملف.'],
+  iosHint: ['Add Waraq to your Home Screen: Share → Add to Home Screen.', 'أضف ورق إلى الشاشة الرئيسية: مشاركة ← إضافة إلى الشاشة الرئيسية.'],
   passOnceHelp: ['Typed once for this sitting; never kept.', 'تُكتب مرة واحدة في هذه الجلسة؛ لا تُحفظ أبدًا.'],
   timestampUrl: ['Timestamp server (optional)', 'خادم الختم الزمني (اختياري)'],
   timestampHelp: ['Off unless you type a server address. Only a hash of the signature is sent there, never your document.', 'معطَّل ما لم تكتب عنوان خادم. يُرسل إليه تجزئة التوقيع فقط، لا مستندك أبدًا.'],
