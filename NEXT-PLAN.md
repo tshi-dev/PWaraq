@@ -9,6 +9,9 @@ Rules unchanged: release gate (test + owner's clearance per release), owner is t
 
 **Owner decision 27 Oct 2026:** code signing (0.3) and the native iOS/App Store track (2.2–2.6) are **paused** — "leave the ipa and the signing for now". Memos kept for later: `Archive-2026-10-12/reviews/CODESIGN-MEMO-2026-10-27.md` (Artifact Signing not open to Saudi individuals → OV + SSL.com eSigner, ask first), `IOS-LICENCE-MEMO-2026-10-27.md` (MuPDF AGPL vs App Store → Artifex quote first). Defender: the beta 2 installer scans clean since 27 Oct (definitions 1.461.217.0). **PWA (2.1) is built** (waraq-next `7a8c62c`, site `992c639`/`9a4ae9a`, staged ZIP `db488c8e…`), waiting for the owner's "preview"/"live". Next work: Phase 1.
 
+
+**Beta 3 status (27 Oct 2026):** GitHub release v1.0.0-beta.3 exists (installer SHA-256 c9402b55…5967) and the code is pushed (PWaraq c22d7e2). Downloaded copies are flagged by Defender as `Trojan:Win32/Wacatac.C!ml` (ML false positive) → owner made **beta 2 "latest" again** and submitted beta 3 to Microsoft; waiting for approval. The beta 3 site is staged and on the preview (https://preview.pwaraq.pages.dev, deployment 26d8fe68, ZIP 9b778750…31f1); production still beta 2. **When cleared:** owner runs `gh release edit v1.0.0-beta.3 -R tshi-dev/PWaraq --latest`; manager runs `node tools/deploy.cjs --production --yes-owner-approved` in waraq-site-1.0 (owner's "Push" on 27 Oct is the clearance for beta 3), checks pwaraq.com, makes a backup. Check: download the release asset and look at `Get-MpThreatDetection`. Lasting fix options for every release: Microsoft Store (MSIX, signed by Microsoft) or code signing — owner to decide.
+
 ## Phase 0 — unblock the Windows download (this week, highest priority)
 | # | Step | Who | Done = |
 |---|---|---|---|
