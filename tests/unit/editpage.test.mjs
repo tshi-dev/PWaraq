@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import * as m from '../../engine/mupdf-wasm/dist/mupdf.js';
 import * as hb from 'harfbuzzjs';
-import { editPage, pageObjects } from '../../src/lib/engine/editpage.ts';
+import { editPage, pageObjects, pictureOf } from '../../src/lib/engine/editpage.ts';
 import { pageWriter } from '../../src/lib/engine/textpage.ts';
 import { fontAt, pick, shape, shaper } from '../../src/lib/engine/ownfont.ts';
 import { arabicDoc, FULL, SUB } from '../arabic-pdf.mjs';
@@ -185,4 +185,58 @@ test('a cover box: black removes what is under it and stays black; white removes
   assert.match(text, /Keep this line/);
   assert.ok(at(white) > 240, 'the white box is white');
   assert.ok(at(apply([{ kind: 'redact', white: true, ...box }], src(), true)) > 240, 'the editor background shows it white too');
+});
+
+// a page of a vector shape, a line of text and a picture drawn over each other's edges: the "move area" journey
+const slide = () => {
+  const doc = new m.PDFDocument(), helv = doc.addSimpleFont(new m.Font('Helvetica')), p = new m.Pixmap(m.ColorSpace.DeviceRGB, [0, 0, 200, 100], false), px = p.getPixels();
+  for (let i = 0; i < px.length; i += 3) { px[i] = 220; px[i + 1] = 30; px[i + 2] = 30; }
+  const ops = '0.1 0.4 0.9 rg 100 600 80 60 re f BT /F1 14 Tf 0 g 108 625 Td (MOVEME) Tj ET q 200 0 0 100 72 500 cm /Im0 Do Q BT /F1 12 Tf 72 300 Td (Stay here) Tj ET';
+  doc.insertPage(-1, doc.addPage([0, 0, 595, 842], 0, { Font: { F1: helv }, XObject: { Im0: doc.addImage(new m.Image(p)) } }, ops));
+  return doc;
+};
+const rgbAt = (page, x, y) => { const pm = page.toPixmap(m.Matrix.identity, m.ColorSpace.DeviceRGB, false), i = (Math.round(y) * pm.getWidth() + Math.round(x)) * 3, s = pm.getPixels(); return [s[i], s[i + 1], s[i + 2]]; };
+const isBlue = ([r, g, b]) => b > 200 && r < 60, isRed = ([r, g, b]) => r > 200 && g < 60 && b < 60, isWhite = (c) => c.every((v) => v > 245);
+
+test('move area: the shape and the text go to the new place as they are, the old place is clean, the picture is cut only inside the rectangle', () => {
+  const from = { x: 90, y: 170, w: 120, h: 90 }, dx = 250, dy = 200; // seen from the top: the shape is at y 182..242, the picture starts at y 242
+  const page = apply([{ kind: 'move', from, x: from.x + dx, y: from.y + dy, w: from.w, h: from.h }], slide());
+  fs.writeFileSync(new URL('../../test-results/editpage-move-area.png', import.meta.url), page.toPixmap(m.Matrix.identity, m.ColorSpace.DeviceRGB, false).asPNG());
+  // vector shape: gone from the old place, drawn at the new one
+  assert.ok(isWhite(rgbAt(page, 140, 212)) || !isBlue(rgbAt(page, 140, 212)), 'old shape gone');
+  assert.ok(isBlue(rgbAt(page, 140 + dx, 190 + dy)), 'shape at the new place');
+  assert.ok(!isBlue(rgbAt(page, 205 + dx, 212 + dy)), 'nothing outside the area was copied');
+  // text: real, once, at the new place
+  const text = page.toStructuredText().asText();
+  assert.equal(text.match(/MOVEME/g)?.length, 1, text);
+  assert.match(text, /Stay here/);
+  assert.equal(text.match(/Stay here/g).length, 1, 'the rest of the page is not copied (hidden) under the clip');
+  const line = pageObjects(page).lines.find((l) => l.text === 'MOVEME');
+  assert.ok(line && Math.abs(line.x - (108 + dx)) < 1.5 && Math.abs(line.y - (842 - 625 - 14 + dy)) < 6, JSON.stringify(line));
+  // the picture: its top strip inside the area moved with it; the rest of it did not move and is not blanked
+  assert.ok(isWhite(rgbAt(page, 150, 250)), 'picture blanked inside the old rectangle');
+  assert.ok(isRed(rgbAt(page, 150, 300)) && isRed(rgbAt(page, 250, 300)) && isRed(rgbAt(page, 80, 300)), 'picture kept outside it');
+  assert.ok(isRed(rgbAt(page, 150 + dx, 250 + dy)), 'its strip at the new place');
+  assert.ok(!isRed(rgbAt(page, 150 + dx, 270 + dy)), 'only the strip inside the area');
+  fs.writeFileSync(new URL('../../test-results/editpage-move-area.png', import.meta.url), page.toPixmap(m.Matrix.identity, m.ColorSpace.DeviceRGB, false).asPNG());
+});
+
+test('move area: not moved is no change, several areas work, and the editor background (lift) is only cleaned', () => {
+  const from = { x: 90, y: 170, w: 120, h: 90 };
+  const same = apply([{ kind: 'move', from, ...from }], slide());
+  assert.ok(isBlue(rgbAt(same, 140, 190)) && /MOVEME/.test(same.toStructuredText().asText()), 'an area left where it was changes nothing');
+  const two = apply([{ kind: 'move', from, x: 300, y: 400, w: from.w, h: from.h }, { kind: 'move', from: { x: 60, y: 300, w: 100, h: 40 }, x: 400, y: 100, w: 100, h: 40 }], slide());
+  assert.equal(two.toStructuredText().asText().match(/Stay here/g).length, 1);
+  assert.ok(isBlue(rgbAt(two, 350, 420)) && !isBlue(rgbAt(two, 140, 190)));
+  assert.ok(isRed(rgbAt(two, 420, 110)), 'the second area took a piece of the picture');
+  const lifted = apply([{ kind: 'move', from, x: 300, y: 400, w: from.w, h: from.h }], slide(), true);
+  assert.ok(!isBlue(rgbAt(lifted, 140, 190)) && !isBlue(rgbAt(lifted, 350, 420)) && !/MOVEME/.test(lifted.toStructuredText().asText()), 'lift: cleaned, nothing drawn');
+});
+
+test('the picture of one photo alone (the editor shows it while it is moved)', () => {
+  const doc = src(), pic = (i) => m.Document.openDocument(pictureOf(m, doc, 0, i).saveToBuffer('garbage=compact').asUint8Array().slice(), 'application/pdf').loadPage(0);
+  const p = pic(1), o = pageObjects(p);
+  assert.equal(o.images.length, 1);
+  assert.ok(near(o.images[0], { x: 350, y: 242, w: 100, h: 100 }));
+  assert.equal(p.toStructuredText().asText().trim(), '', 'no text');
 });

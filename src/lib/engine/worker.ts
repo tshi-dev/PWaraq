@@ -3,7 +3,7 @@
 import type * as MuPDF from '../../../engine/mupdf-wasm/dist/mupdf.js';
 import { assemble } from './assemble';
 import { compress, protect, unlock, guardOf, sealLikeSource, decrypt } from './tools';
-import { editPage, pageObjects, type Edit, type Own } from './editpage';
+import { editPage, pageObjects, pictureOf, type Edit, type Own } from './editpage';
 import { findSpots, signPdf } from './sign';
 import { listSignatures, prepareSignature } from './signcert';
 import { findMatches, redact } from './redact';
@@ -68,6 +68,14 @@ function list(n: number, id = 0): MuPDF.DisplayList {
 function bitmap(pix: MuPDF.Pixmap): Promise<ImageBitmap> {
   const w = pix.getWidth(), h = pix.getHeight(), rgb = pix.getPixels(), rgba = new Uint8ClampedArray(w * h * 4);
   for (let i = 0, j = 0; i < rgb.length; i += 3, j += 4) { rgba[j] = rgb[i]; rgba[j + 1] = rgb[i + 1]; rgba[j + 2] = rgb[i + 2]; rgba[j + 3] = 255; }
+  pix.destroy();
+  return createImageBitmap(new ImageData(rgba, w, h));
+}
+
+// the same with transparency (MuPDF's samples are premultiplied)
+function bitmapAlpha(pix: MuPDF.Pixmap): Promise<ImageBitmap> {
+  const w = pix.getWidth(), h = pix.getHeight(), s = pix.getPixels(), rgba = new Uint8ClampedArray(w * h * 4);
+  for (let i = 0; i < s.length; i += 4) { const a = s[i + 3]; rgba[i + 3] = a; if (a) for (let k = 0; k < 3; k++) rgba[i + k] = Math.min(255, Math.round((s[i + k] * 255) / a)); }
   pix.destroy();
   return createImageBitmap(new ImageData(rgba, w, h));
 }
@@ -166,6 +174,13 @@ const ops: Record<string, (r: Req) => any> = {
   async ocrlayer(r) { await loadFonts(); return addTextLayer(mupdf, r.bytes, r.layers, fonts!); },
   // page editor: the lines of text and photos on a page
   objects(r) { const p = source(r.doc).doc.loadPage(r.page); try { return pageObjects(p); } finally { p.destroy(); } },
+  // page editor: photo `index` of the page alone on a transparent page, as a picture at `scale`
+  picture(r) {
+    const pdf = source(r.doc).doc.asPDF();
+    if (!pdf) throw new Error('not a PDF: ' + r.doc);
+    const out = pictureOf(mupdf, pdf, r.page, r.index), p = out.loadPage(0);
+    try { return bitmapAlpha(p.toPixmap(mupdf.Matrix.scale(r.scale, r.scale), mupdf.ColorSpace.DeviceRGB, true)); } finally { p.destroy(); out.destroy(); }
+  },
   // page editor: which font a replaced line will be written in, and the letters its own font lacks
   async fontcheck(r) {
     const o = await loadOwn(), p = source(r.doc).doc.loadPage(r.page);

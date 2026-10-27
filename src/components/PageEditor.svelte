@@ -23,8 +23,11 @@
   // what the editor holds: the engine's edits plus an id; `orig` = the state it was lifted with (unchanged ones are dropped)
   type Obj = Edit & { id: string; orig?: string; line?: number; removed?: boolean; aligned?: boolean };
   let doc = $state(-1), size = $state({ w: 595, h: 842 }), found = $state<{ lines: PageLine[]; images: Box[] }>({ lines: [], images: [] });
-  let objs = $state<Obj[]>([]), selected = $state<string | null>(null), tool = $state<'select' | 'text' | 'redact'>('select'), busy = $state(t('openingPage'));
+  let objs = $state<Obj[]>([]), selected = $state<string | null>(null), tool = $state<'select' | 'text' | 'redact' | 'move'>('select'), busy = $state(t('openingPage'));
   const sel = $derived(objs.find((o) => o.id === selected));
+  let sheet = $state<HTMLElement>();
+  // photos in the order they are offered to the pointer: the biggest first, so the smallest one under it ends up on top and wins
+  const byArea = $derived(found.images.map((_, i) => i).sort((a, b) => found.images[b].w * found.images[b].h - found.images[a].w * found.images[a].h));
   // a replaced line: the font it will be written in (its own, or the closest bundled one and the letters that were missing)
   let fontInfo = $state<{ font: string; using: string | null; missing: string[]; reason?: 'own' | 'missing' | 'unusable' | 'none'; source?: 'pdf' | 'bundled' | 'system'; width?: number } | null>(null);
   const systemTried = new Set<string>(); // families this sitting already looked for on this PC
@@ -68,7 +71,7 @@
       busy = '';
     })();
     measure();
-    return () => { urls.forEach((u) => URL.revokeObjectURL(u)); if (clean) URL.revokeObjectURL(clean); };
+    return () => { urls.forEach((u) => URL.revokeObjectURL(u)); if (clean) URL.revokeObjectURL(clean); Object.values(pics).forEach((u) => URL.revokeObjectURL(u)); };
   });
 
   // the page fills the middle; s = screen pixels per point
@@ -91,7 +94,8 @@
   let canvas = $state<HTMLCanvasElement>(), clean = $state(''); // clean: the untouched page, for pictures of photos being moved
   const lifted = $derived(JSON.stringify(objs.flatMap((o): Edit[] => o.kind === 'image' ? [{ kind: 'image', index: o.index, from: o.from, ...o.from }]
     : o.kind === 'text' && o.from ? [{ kind: 'text', from: o.from, text: '', size: 1, color: [0, 0, 0], bold: false, align: 'left', ...o.from }]
-    : o.kind === 'redact' && o.w > 2 && o.h > 2 ? [{ kind: 'redact', white: o.white, x: o.x, y: o.y, w: o.w, h: o.h }] : [])));
+    : o.kind === 'redact' && o.w > 2 && o.h > 2 ? [{ kind: 'redact', white: o.white, x: o.x, y: o.y, w: o.w, h: o.h }]
+    : o.kind === 'move' && o.from.w > 2 && o.from.h > 2 ? [{ kind: 'move', from: o.from, ...o.from }] : [])));
   $effect(() => {
     if (doc < 0 || !s || !canvas) return;
     const edits = JSON.parse(lifted) as Edit[], scale = s * Math.min(devicePixelRatio || 1, 2), c = canvas;
@@ -147,7 +151,7 @@
   // a click on the page: places a new text box (Add text), or lets go of the selection
   function pageDown(e: PointerEvent) {
     if (e.target !== e.currentTarget && !(e.target as HTMLElement).matches('canvas')) return;
-    if (tool === 'redact') { markArea(e); return; }
+    if (tool === 'redact' || tool === 'move') { markArea(e); return; }
     if (tool !== 'text') { select(null); return; }
     // the box grows from the click towards the end of the line: rightwards in English, leftwards in Arabic
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect(), x = (e.clientX - r.left) / s, y = (e.clientY - r.top) / s, rtl = i18n.lang === 'ar';
@@ -157,17 +161,19 @@
     change(() => objs.push(o)); select(o.id); tool = 'select'; focusText(o.id);
   }
   let coverWhite = $state(false); // the fill the next box gets: the last one chosen
-  // Redact: drag a box over what should go; it stays selected (move it, resize it, Delete takes it away)
+  // Redact / Move area: drag a box over what should go (or move); it stays selected (move it, resize it, Delete takes it away)
   function markArea(e: PointerEvent) {
     e.preventDefault();
     const el = e.currentTarget as HTMLElement, r = el.getBoundingClientRect(), x0 = (e.clientX - r.left) / s, y0 = (e.clientY - r.top) / s, before = snap();
-    const o: Obj = { id: uid(), kind: 'redact', white: coverWhite, x: x0, y: y0, w: 0, h: 0 };
+    const o: Obj = tool === 'move' ? { id: uid(), kind: 'move', from: { x: x0, y: y0, w: 0, h: 0 }, x: x0, y: y0, w: 0, h: 0 } : { id: uid(), kind: 'redact', white: coverWhite, x: x0, y: y0, w: 0, h: 0 };
     objs.push(o); select(o.id);
     const box = objs[objs.length - 1];
     el.setPointerCapture(e.pointerId);
     const move = (ev: PointerEvent) => {
       const x = (ev.clientX - r.left) / s, y = (ev.clientY - r.top) / s;
-      Object.assign(box, { x: Math.min(x0, x), y: Math.min(y0, y), w: Math.abs(x - x0), h: Math.abs(y - y0) });
+      const b = { x: Math.min(x0, x), y: Math.min(y0, y), w: Math.abs(x - x0), h: Math.abs(y - y0) };
+      Object.assign(box, b);
+      if (box.kind === 'move') box.from = b;
     };
     const up = () => {
       el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up);
@@ -190,18 +196,29 @@
       x: l.rtl ? l.x + l.w - w : l.x, y: l.base - BASELINE * l.size, w, h: l.h };
     o.orig = stateOf(o); objs.push(o); select(id); focusText(id);
   }
+  // the picture of a lifted photo alone (page-sized, transparent), for the box that follows the pointer
+  let pics = $state<Record<number, string>>({});
+  async function pictureOf(i: number) {
+    if (pics[i]) return;
+    try {
+      const bmp = await pool.run<ImageBitmap>({ op: 'picture', page: 0, priority: 0, args: { doc, page: 0, index: i, scale: Math.min(3, Math.max(1.5, s * Math.min(devicePixelRatio || 1, 2))) } });
+      const o = new OffscreenCanvas(bmp.width, bmp.height); o.getContext('2d')!.drawImage(bmp, 0, 0); bmp.close();
+      pics[i] = URL.createObjectURL(await o.convertToBlob());
+    } catch {}
+  }
   function liftImage(i: number) {
     const b = found.images[i], o: Obj = { id: uid(), kind: 'image', index: i, from: { ...b }, ...b };
-    o.orig = stateOf(o); objs.push(o); select(o.id);
+    o.orig = stateOf(o); objs.push(o); select(o.id); pictureOf(i);
+    return objs[objs.length - 1];
   }
   const liftedLine = (i: number) => objs.some((o) => o.kind === 'text' && o.line === i);
   const liftedImage = (i: number) => objs.some((o) => o.kind === 'image' && o.index === i);
 
   // drag to move (the whole photo, or the bar above a text box); the corner resizes (photos keep their shape)
-  function drag(e: PointerEvent, o: Obj, mode: 'move' | 'size') {
+  function drag(e: PointerEvent, o: Obj, mode: 'move' | 'size', el = e.currentTarget as HTMLElement) {
     if (e.button !== 0) return;
     e.preventDefault(); e.stopPropagation(); select(o.id);
-    const el = e.currentTarget as HTMLElement, before = snap(), sx = e.clientX, sy = e.clientY, start = { x: o.x, y: o.y, w: o.w, h: o.h };
+    const before = snap(), sx = e.clientX, sy = e.clientY, start = { x: o.x, y: o.y, w: o.w, h: o.h };
     let moved = false;
     el.setPointerCapture(e.pointerId);
     const move = (ev: PointerEvent) => {
@@ -261,13 +278,12 @@
     }
     bmp.close();
   }
-  // a photo being moved: the new photo, or the picture of the old one cut from the untouched page
+  // what a box being moved shows: the old photo alone, or the part of the untouched page an area covers
   function picture(o: Obj) {
-    if (o.kind === 'image' && o.photo == null) {
-      const kx = o.w / o.from.w, ky = o.h / o.from.h;
-      return `background-image:url(${clean});background-size:${size.w * s * kx}px ${size.h * s * ky}px;background-position:${-o.from.x * s * kx}px ${-o.from.y * s * ky}px`;
-    }
-    return '';
+    const url = o.kind === 'move' ? clean : o.kind === 'image' && o.photo == null ? pics[o.index] : '';
+    if (!url || (o.kind !== 'move' && o.kind !== 'image')) return '';
+    const kx = o.w / o.from.w, ky = o.h / o.from.h;
+    return `background-image:url(${url});background-size:${size.w * s * kx}px ${size.h * s * ky}px;background-position:${-o.from.x * s * kx}px ${-o.from.y * s * ky}px`;
   }
 
   async function save() {
@@ -301,6 +317,7 @@
     <button class="btn" class:on={tool === 'text'} aria-pressed={tool === 'text'} onclick={() => { tool = 'text'; select(null); }} disabled={doc < 0}>{@html icon('text')}{t('addText')}</button>
     <button class="btn" onclick={() => choosePhoto(false)} disabled={doc < 0}>{@html icon('images')}{t('addPhoto')}</button>
     <button class="btn" class:on={tool === 'redact'} aria-pressed={tool === 'redact'} onclick={() => { tool = 'redact'; select(null); }} disabled={doc < 0}>{@html icon('redact')}{t('redactArea')}</button>
+    <button class="btn" class:on={tool === 'move'} aria-pressed={tool === 'move'} onclick={() => { tool = 'move'; select(null); }} disabled={doc < 0}>{@html icon('select')}{t('moveArea')}</button>
     <span class="sep"></span>
     <button class="btn icon" onclick={undo} disabled={!canUndo} title={t('undo')} aria-label={t('undo')}>{@html icon('undo')}</button>
     <button class="btn icon" onclick={redo} disabled={!canRedo} title={t('redo')} aria-label={t('redo')}><span class="flip">{@html icon('undo')}</span></button>
@@ -318,11 +335,11 @@
       {#if busy}<p class="busy" role="status">{busy}</p>{/if}
       {#if s}
         <!-- svelte-ignore a11y_no_static_element_interactions (the page itself: a click places text or lets go of the selection) -->
-        <div class="sheet" class:placing={tool !== 'select'} dir="ltr" style="width:{size.w * s}px;height:{size.h * s}px" onpointerdown={pageDown}>
+        <div class="sheet" class:placing={tool !== 'select'} bind:this={sheet} dir="ltr" style="width:{size.w * s}px;height:{size.h * s}px" onpointerdown={pageDown}>
           <canvas bind:this={canvas} style="width:{size.w * s}px;height:{size.h * s}px"></canvas>
           {#if tool === 'select' && doc >= 0}
-            {#each found.images as b, i}{#if !liftedImage(i)}
-              <button class="hit photo" style="left:{b.x * s}px;top:{b.y * s}px;width:{b.w * s}px;height:{b.h * s}px" aria-label="{t('changePhoto')} {i + 1}" onpointerdown={(e) => { e.stopPropagation(); liftImage(i); }}></button>
+            {#each byArea as i}{@const b = found.images[i]}{#if !liftedImage(i)}
+              <button class="hit photo" style="left:{b.x * s}px;top:{b.y * s}px;width:{b.w * s}px;height:{b.h * s}px" aria-label="{t('changePhoto')} {i + 1}" onpointerdown={(e) => { if (e.button === 0) drag(e, liftImage(i), 'move', sheet); }}></button>
             {/if}{/each}
             {#each found.lines as l, i}{#if !liftedLine(i)}
               <button class="hit line" style="left:{l.x * s}px;top:{l.y * s}px;width:{l.w * s}px;height:{l.h * s}px" aria-label="{t('changeText')}: {l.text}" onpointerdown={(e) => { e.stopPropagation(); e.preventDefault(); liftLine(i); }}></button>
@@ -340,10 +357,10 @@
                 </div>
               {:else}
                 <!-- svelte-ignore a11y_no_static_element_interactions (moved with the pointer; Delete and the options panel work from the keyboard) -->
-                <div class="obj pic" class:redact={o.kind === 'redact'} class:on={o.id === selected} data-obj={o.id} style="left:{o.x * s}px;top:{o.y * s}px;width:{o.w * s}px;height:{o.h * s}px;{picture(o)}"
+                <div class="obj pic" class:redact={o.kind === 'redact'} class:area={o.kind === 'move'} class:on={o.id === selected} data-obj={o.id} style="left:{o.x * s}px;top:{o.y * s}px;width:{o.w * s}px;height:{o.h * s}px;{picture(o)}"
                   onpointerdown={(e) => drag(e, o, 'move')}>
-                  {#if o.kind !== 'redact' && o.photo != null}<img src={urls[o.photo]} alt="" draggable="false" />{/if}
-                  {#if o.id === selected}<div class="corner" title={t('resizeHandle')} onpointerdown={(e) => drag(e, o, 'size')}></div>{/if}
+                  {#if (o.kind === 'image' || o.kind === 'photo') && o.photo != null}<img src={urls[o.photo]} alt="" draggable="false" />{/if}
+                  {#if o.id === selected && o.kind !== 'move'}<div class="corner" title={t('resizeHandle')} onpointerdown={(e) => drag(e, o, 'size')}></div>{/if}
                 </div>
               {/if}
             {/if}
@@ -398,6 +415,10 @@
         </div>
         <p class="help">{t(o.white ? 'coverWhiteHelp' : 'placeRedact')}</p>
         <button class="btn" onclick={remove}>{@html icon('delete')}{t('delete')}</button>
+      {:else if sel?.kind === 'move'}
+        <h2>{t('moveArea')}</h2>
+        <p class="help">{t('moveAreaHelp')}</p>
+        <button class="btn" onclick={remove}>{@html icon('delete')}{t('delete')}</button>
       {:else if sel}
         <h2>{t('photoOptions')}</h2>
         <p class="help">{t('photoHelp')}</p>
@@ -405,7 +426,7 @@
         <button class="btn" onclick={remove}>{@html icon('delete')}{t('delete')}</button>
       {:else}
         <h2>{t('editPage')}</h2>
-        <p class="help">{tool === 'text' ? t('placeText') : tool === 'redact' ? t('placeRedact') : t('editorHelp')}</p>
+        <p class="help">{tool === 'text' ? t('placeText') : tool === 'redact' ? t('placeRedact') : tool === 'move' ? t('placeMove') : t('editorHelp')}</p>
         <p class="note">{@html icon('info')}<span>{t('fontNote')}</span></p>
       {/if}
     </aside>
@@ -431,6 +452,7 @@
   .hit.line { cursor: text; }
   .obj { position: absolute; }
   .obj.redact { border: 2px dashed var(--danger); }
+  .obj.area { border: 1px solid var(--green); }
   .obj.on { outline: 2px dashed var(--green); outline-offset: 2px; }
   .text textarea { display: block; width: 100%; min-height: 1em; padding: 0; margin: 0; border: 0; background: transparent; resize: none; overflow: hidden; white-space: pre-wrap; font-family: Tajawal, sans-serif; field-sizing: content; outline: none; }
   .text:not(.on):hover { outline: 1px solid var(--green); }

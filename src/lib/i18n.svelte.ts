@@ -250,6 +250,7 @@ const strings = {
   photoTop: ['Across the top', 'في الأعلى'], photoFull: ['Whole page', 'الصفحة كاملة'],
   dragSection: ['Drag to move the section', 'اسحب لنقل القسم'],
   // phase 3: redact, forms, OCR
+  moveArea: ['Move area', 'نقل منطقة'], placeMove: ['Drag over the part of the page to move. Then drag it to its new place: text and drawings stay real, a picture is cut at the edge.', 'اسحب فوق الجزء الذي تريد نقله ثم اسحبه إلى مكانه الجديد: يبقى النص والرسم حقيقيين وتُقصّ الصورة عند الحافة.'], moveAreaHelp: ['Drag the area to move it. Saving the page moves what is inside it for good; Delete puts it back.', 'اسحب المنطقة لنقلها. حفظ الصفحة ينقل ما بداخلها نهائيًا؛ الحذف يعيدها.'],
   redactArea: ['Redact', 'تعتيم'], coverFill: ['Fill', 'التعبئة'], coverBlack: ['Black', 'أسود'], coverWhite: ['White', 'أبيض'],
   coverWhiteHelp: ['What is under the box is removed for good and the box is white: write new text over it (for drawings and scans).', 'يُزال ما تحت المربع نهائيًا ويصبح المربع أبيض: اكتب نصًا جديدًا فوقه (للمخططات والمستندات الممسوحة).'], placeRedact: ['Drag over what should be removed for good. Saving the page removes it from the file.', 'اسحب فوق ما يجب إزالته نهائيًا. حفظ الصفحة يزيله من الملف.'],
   redact: ['Redact', 'تعتيم'], forms: ['Forms', 'نماذج'],

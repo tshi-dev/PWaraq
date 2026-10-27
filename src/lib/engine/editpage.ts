@@ -21,7 +21,9 @@ export type Edit =
   | ({ kind: 'image'; index: number; from: Box; photo?: number; removed?: boolean } & Box)
   // redaction: text, photo pixels and lines under the box removed from the page for good, a black box in their place
   // (white: a white box, to write over — a "white-out" for drawings and scans)
-  | ({ kind: 'redact'; white?: boolean } & Box);
+  | ({ kind: 'redact'; white?: boolean } & Box)
+  // move area: what is inside `from` (text and lines stay real, pictures stay pictures) is cut out of its place and drawn in the box (same size)
+  | ({ kind: 'move'; from: Box } & Box);
 
 /** Text box layout shared with the editor screen: first baseline `BASELINE`·size below the box top, lines `LEADING`·size apart. */
 export const LEADING = 1.3, BASELINE = 1.0;
@@ -241,6 +243,16 @@ export function editPage(m: typeof MuPDF, src: MuPDF.PDFDocument, index: number,
       for (const mk of marks) redactText.push(limit(mk, mk.y + mk.h / 2));
     }
   }
+  // move areas: the page as it was (contents + resources, taken before the redactions replace them) becomes a form, drawn later clipped to each area
+  type Move = Extract<Edit, { kind: 'move' }>;
+  const moves = edits.filter((e): e is Move => e.kind === 'move' && (lift || e.x !== e.from.x || e.y !== e.from.y));
+  let whole: MuPDF.PDFObject | null = null;
+  if (moves.length && !lift) {
+    const c = obj.get('Contents'), parts = (c.isArray() ? [...Array(c.length).keys()].map((i) => c.get(i)) : c.isNull() ? [] : [c]).map((x) => x.readStream().asUint8Array());
+    const bytes = new Uint8Array(parts.reduce((k, p) => k + p.length + 1, 0));
+    parts.reduce((k, p) => { bytes.set(p, k); bytes[k + p.length] = 10; return k + p.length + 1; }, 0);
+    whole = out.addStream(bytes, { Type: 'XObject', Subtype: 'Form', BBox: obj.getInheritable('MediaBox'), Resources: obj.getInheritable('Resources') });
+  }
   const redact = (boxes: Box[], imageMethod: number, textMethod: number) => {
     if (!boxes.length) return;
     for (const b of boxes) page.createAnnotation('Redact').setRect([b.x, b.y, b.x + b.w, b.y + b.h]);
@@ -248,7 +260,8 @@ export function editPage(m: typeof MuPDF, src: MuPDF.PDFDocument, index: number,
   };
   redact(redactImages, 1, 1); // remove images there, keep text and lines
   redact(redactText, 0, 0); // remove text there, keep images and lines
-  const hide = edits.filter((e): e is Extract<Edit, { kind: 'redact' }> => e.kind === 'redact');
+  // the place an area leaves is cleaned like a white cover
+  const hide = [...edits.filter((e): e is Extract<Edit, { kind: 'redact' }> => e.kind === 'redact'), ...moves.map((e): Extract<Edit, { kind: 'redact' }> => ({ kind: 'redact', white: true, ...e.from }))];
   for (const white of [false, true]) { // before new text and photos, which stay
     const boxes = hide.filter((b) => !!b.white === white);
     if (!boxes.length) continue;
@@ -258,6 +271,14 @@ export function editPage(m: typeof MuPDF, src: MuPDF.PDFDocument, index: number,
   // a white cover: what is under it is removed the same way, then it is filled white, under everything new (also in the editor's background)
   const covers = hide.filter((b) => b.white).map((b) => `${n(b.x)} ${n(H - b.y - b.h)} ${n(b.w)} ${n(b.h)} re`).join(' ');
   if (covers) draw.push(`q ${m.Matrix.concat([1, 0, 0, -1, 0, H], inv).map(n).join(' ')} cm 1 1 1 rg ${covers} f Q`);
+  if (whole) { // the areas, on top of the cleaned page: clipped to where they were, shifted by how far they moved
+    added.WqM = whole;
+    const pt = (x: number, y: number) => `${n(inv[0] * x + inv[2] * y + inv[4])} ${n(inv[1] * x + inv[3] * y + inv[5])}`;
+    for (const e of moves) {
+      const { x, y, w, h } = e.from, cm = m.Matrix.concat(m.Matrix.concat(T, m.Matrix.translate(e.x - x, e.y - y)), inv);
+      draw.push(`q ${cm.map(n).join(' ')} cm ${pt(x, y)} m ${pt(x + w, y)} l ${pt(x + w, y + h)} l ${pt(x, y + h)} l h W n /WqM Do Q`); // the clip moves with the content
+    }
+  }
   const resources: Record<string, Record<string, MuPDF.PDFObject>> = { XObject: added };
 
   if (!lift) {
@@ -287,6 +308,17 @@ export function editPage(m: typeof MuPDF, src: MuPDF.PDFDocument, index: number,
   }
   if (draw.length) { page.destroy(); stamp(out, out.findPage(0), draw.join('\n'), resources); page = out.loadPage(0); }
   page.destroy();
+  return out;
+}
+
+/** Image `i` of the page alone (page `index` of `src` with everything else taken away), as a one-page PDF: the editor's picture of a photo being moved. */
+export function pictureOf(m: typeof MuPDF, src: MuPDF.PDFDocument, index: number, i: number): MuPDF.PDFDocument {
+  const out = new m.PDFDocument();
+  out.graftPage(-1, src, index);
+  const page = out.loadPage(0), b = imageBlocks(page)[i], obj = page.getObject(), inv = m.Matrix.invert(page.getTransform());
+  page.destroy();
+  obj.delete('Annots'); obj.put('Contents', out.addStream('', {}));
+  if (b) stamp(out, out.findPage(0), `q ${m.Matrix.concat(m.Matrix.concat(FLIP, b.transform), inv).map(n).join(' ')} cm /WqP Do Q`, { XObject: { WqP: out.addImage(b.image) } });
   return out;
 }
 
