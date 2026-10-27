@@ -31,6 +31,15 @@ Rules unchanged: release gate (test + owner's clearance per release), owner is t
 | 1.6 | **Done 27 Oct** (07a6e6e; note: opened with the owner password → saved with it as the open password too). Save after Organize/Comment keeps protection (PLAN.md line 746 "Not yet"). | Builder |
 | 1.7 | **Done — beta 3 live**: full suite green (8 dev-only crash checks; pwa/support flaky under load, pass alone), version 1.0.0-beta.3 + notes c380255, PWA included. Beta 3 release when 1.3–1.6 land: full suite on the built app + Tester Chrome pass + owner's yes. | Manager + Releaser |
 
+
+## Beta 4 (owner, 27 Oct 2026 — after comparing Edit with PDFCraft on his slide PDF)
+| # | Step | Status |
+|---|---|---|
+| 4.1 | Picture move fix + **Move area** tool (cut any part of a page and move it; vectors/text stay real) | **Done** b0e7858 (unit 157/157) |
+| 4.2 | **File size blocker:** editing one page of a 54-page PDF with shared resources saved 175 MB from 3.5 MB | Builder card "W: Save — fix huge file after editing one page" |
+| 4.3 | **Layers** in Edit (owner): side-panel list of every object on the page (pictures, moved areas, text boxes, photos) with previews — click to select even when covered; Bring to front / Forward / Backward / Send to back; eye toggle to hide while editing; undo. Moved pictures/areas drawn at their chosen order (today: always on top). Parts inside one original picture become layers after Move area. | Builder **after 4.2** (same engine file) |
+| 4.4 | Beta 4 release: full suite, installer (owner double-click), Defender scan of the downloaded asset, Microsoft submission if flagged, owner's yes | Manager |
+
 ## Phase 2 — iPhone / iPad (start after beta 3; parallel with Phase 1 research)
 | # | Step | Who | Notes |
 |---|---|---|---|
