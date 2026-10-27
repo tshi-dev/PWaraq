@@ -14,6 +14,7 @@
   import { buildCms, covered, fromPdfDate, hex, parseCert, pdfDate, timestamp as tsaToken, verifyCms, type Check, type SigEntry } from '../lib/engine/pades';
   import type { Prepared, SigPlan } from '../lib/engine/signcert';
   import { cat } from '../lib/engine/der';
+  import { pageZoom } from '../lib/touch';
   import { createId, importId, listIds, removeId, unlockId, type DigitalId, type Unlocked } from '../lib/ids';
 
   let { pool, first, onDone }: { pool: EnginePool; first: { name: string; bytes: Uint8Array; sizes: { w: number; h: number }[] };
@@ -265,7 +266,8 @@
 
   // --- the page --------------------------------------------------------------------------------------------------------
   let sw = $state(0), sh = $state(0), canvas = $state<HTMLCanvasElement>();
-  const s = $derived(sw && sh ? Math.max(0.2, Math.min((sw - 48) / size.w, (sh - 48) / size.h)) : 0);
+  let zoomF = $state(1); // Ctrl + wheel / pinch on top of the fit-to-stage scale
+  const s = $derived(sw && sh ? Math.max(0.2, Math.min((sw - 48) / size.w, (sh - 48) / size.h)) * zoomF : 0);
   $effect(() => {
     const doc = f.doc, c = canvas;
     if (doc == null || !s || !c) return;
@@ -323,7 +325,7 @@
   </div>
 
   <div class="body">
-    <div class="stage" bind:clientWidth={sw} bind:clientHeight={sh}>
+    <div class="stage" bind:clientWidth={sw} bind:clientHeight={sh} use:pageZoom={{ get: () => zoomF, set: (v) => (zoomF = v), min: 0.5, max: 3 }}>
       {#if busy}<p class="busy" role="status">{busy}</p>{/if}
       {#if s}
         <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions (the page itself: a click signs there; Enter and the panel work from the keyboard) -->
@@ -561,7 +563,7 @@
   .idbtn { flex: 1; }
   .field input[type='password'], .field input[type='email'], .field input[type='url'] { min-height: var(--control); padding: 0 var(--s-12); border: 1px solid var(--line); border-radius: var(--r-8); background: var(--paper); font-weight: 400; }
   .body { display: grid; grid-template-columns: 1fr 320px; min-height: 0; }
-  .stage { position: relative; overflow: auto; display: grid; place-items: center; padding: var(--s-24); background: var(--canvas); min-height: 0; }
+  .stage { position: relative; overflow: auto; display: grid; place-items: safe center; padding: var(--s-24); background: var(--canvas); min-height: 0; }
   .busy { position: absolute; inset: 0; z-index: 3; margin: 0; display: grid; place-items: center; background: var(--veil); font-size: var(--fs-16); font-weight: 600; }
   .sheet { position: relative; background: var(--surface); box-shadow: var(--shadow); cursor: crosshair; }
   .sheet canvas { position: absolute; inset: 0; }

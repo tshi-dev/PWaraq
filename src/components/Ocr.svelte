@@ -10,11 +10,12 @@
   import { readBlocks, LONG_SIDE } from '../lib/ocr-strong';
   import { alignBlocks } from '../lib/ocr-align';
   import { lazyPage } from '../lib/lazy';
+  import { pageZoom } from '../lib/touch';
   import { t } from '../lib/i18n.svelte';
   import { icon } from '../lib/icons.js';
 
   let { pool, sizes, bytes, onReplace }: { pool: EnginePool; sizes: { w: number; h: number }[]; bytes: Uint8Array; onReplace: (bytes: Uint8Array) => Promise<void> } = $props();
-  const W = 560, k = (i: number) => W / sizes[i].w, lazy = lazyPage(() => pool, 'ocr', k);
+  const W0 = 560; let W = $state(W0); const k = (i: number) => W / sizes[i].w, lazy = lazyPage(() => pool, 'ocr', k);
   let ara = $state(true), eng = $state(true), scope = $state<'scanned' | 'all'>('scanned');
   let quality = $state<'fast' | 'best'>('fast'), bestOn = $state(false); // Best: the desktop add-on, offered only where it can run
   onMount(() => { bestAvailable().then((v) => (bestOn = v)); });
@@ -67,9 +68,9 @@
 </script>
 
 <div class="ocr">
-  <section class="pages" aria-label={t('pages')}>
+  <section class="pages" aria-label={t('pages')} use:pageZoom={{ get: () => W, set: (v) => (W = v), min: W0 / 2, max: W0 * 3 }}>
     {#each sizes as s, i}
-      <div class="sheet" style="width:{W}px;height:{s.h * k(i)}px"><canvas use:lazy={i}></canvas></div>
+      <div class="sheet" style="width:{W}px;height:{s.h * k(i)}px"><canvas use:lazy={[i, W]}></canvas></div>
     {/each}
   </section>
 
@@ -106,7 +107,7 @@
 
 <style>
   .ocr { height: 100%; display: grid; grid-template-columns: 1fr 340px; min-height: 0; }
-  .pages { display: flex; flex-direction: column; align-items: center; gap: var(--s-16); background: var(--canvas); padding: var(--s-24); overflow: auto; }
+  .pages { display: flex; flex-direction: column; align-items: safe center; gap: var(--s-16); background: var(--canvas); padding: var(--s-24); overflow: auto; }
   .sheet { position: relative; flex: none; background: #fff; box-shadow: var(--shadow); }
   .sheet canvas { width: 100%; height: 100%; display: block; }
   .side { display: flex; flex-direction: column; gap: var(--s-12); padding: var(--s-16); background: var(--surface); border-inline-start: 1px solid var(--line); overflow-y: auto; }

@@ -1,3 +1,4 @@
+import { tick } from 'svelte';
 // Two-finger pinch on an element. Touch events (not pointer events) so the browser's own page zoom and two-finger scroll can be cancelled.
 // `change(ratio, x, y)`: ratio of the current finger distance to the distance when the second finger came down; x, y: the middle between the fingers.
 export function pinch(node: HTMLElement, o: { start?: () => void; change: (ratio: number, x: number, y: number) => void; end?: () => void }) {
@@ -28,4 +29,20 @@ export function ctrlWheel(node: HTMLElement, zoom: (factor: number, x: number, y
   };
   node.addEventListener('wheel', wheel, { passive: false });
   return { update(z: typeof zoom) { fn = z; }, destroy() { node.removeEventListener('wheel', wheel); } };
+}
+
+// Ctrl + wheel and pinch over a scrolling area change one number (page width, zoom factor) within [min, max], keeping the spot under the pointer in place.
+export function pageZoom(node: HTMLElement, o: { get: () => number; set: (v: number) => void; min: number; max: number }) {
+  let v0 = 0;
+  const to = async (v: number, x: number, y: number) => {
+    const old = o.get(), nv = Math.min(o.max, Math.max(o.min, v));
+    if (nv === old) return;
+    const r = node.getBoundingClientRect(), r1 = nv / old;
+    const px = node.scrollLeft + x - r.left, py = node.scrollTop + y - r.top;
+    o.set(nv); await tick();
+    node.scrollLeft = px * r1 - (x - r.left); node.scrollTop = py * r1 - (y - r.top);
+  };
+  const a = ctrlWheel(node, (f, x, y) => to(o.get() * f, x, y));
+  const b = pinch(node, { start: () => (v0 = o.get()), change: (ratio, x, y) => to(v0 * ratio, x, y) });
+  return { destroy() { a.destroy(); b.destroy(); } };
 }
