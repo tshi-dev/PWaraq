@@ -229,7 +229,7 @@
 
 {#if doc}
   <Workspace {pool} sizes={doc.sizes} name={doc.name} bytes={doc.bytes} modified={doc.modified} password={doc.password} onOpen={pick} onClose={close} onSave={() => save()} onSaveAs={() => save(true)}
-    onReplace={(bytes) => show(bytes, doc!.name, true)} />
+    onReplace={(bytes, pw) => show(bytes, doc!.name, true, pw)} />
 {:else if portfolio}
   <Portfolio {pool} {portfolio} onClose={close} />
 {:else}

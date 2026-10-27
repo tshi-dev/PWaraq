@@ -9,7 +9,7 @@
   import { icon } from '../lib/icons.js';
   import { lazyPage } from '../lib/lazy';
 
-  let { pool, sizes, bytes, changed = $bindable(false) }: { pool: EnginePool; sizes: { w: number; h: number }[]; bytes: Uint8Array; changed?: boolean } = $props();
+  let { pool, sizes, bytes, password, changed = $bindable(false) }: { pool: EnginePool; sizes: { w: number; h: number }[]; bytes: Uint8Array; password?: string; changed?: boolean } = $props();
   const W = 720, k = (i: number) => W / sizes[i].w;
   type Tool = 'select' | Kind;
   const TOOLS: [Tool, Key][] = [['select', 'cSelect'], ['highlight', 'cHighlight'], ['underline', 'cUnderline'], ['strike', 'cStrike'], ['ink', 'cPen'], ['square', 'cRect'], ['circle', 'cEllipse'], ['line', 'cLine'], ['arrow', 'cArrow'], ['text', 'cText'], ['note', 'cNote']];
@@ -26,10 +26,10 @@
 
   onMount(async () => {
     try {
-      orig = await pool.tool<Annot[]>('annotlist', { bytes: bytes.slice() });
+      orig = await pool.tool<Annot[]>('annotlist', { bytes: bytes.slice(), password });
       items = structuredClone(orig);
       // the pages are drawn from a copy without these comments (they are drawn here, where they can be moved)
-      doc = (await pool.add(await pool.tool('annotapply', { bytes: bytes.slice(), remove: orig.map(src), add: [] }))).id;
+      doc = (await pool.add(await pool.tool('annotapply', { bytes: bytes.slice(), remove: orig.map(src), add: [], password }))).id;
     } catch { error = t('toolFailed'); }
   });
 
@@ -38,7 +38,7 @@
     const now = new Map(items.map((a) => [a.id, a])), was = new Map(orig.map((a) => [a.id, a])), same = (a: Annot, b: Annot) => JSON.stringify(a) === JSON.stringify(b);
     const remove = orig.filter((o) => !same(o, now.get(o.id) ?? ({} as Annot))).map(src);
     const add = items.filter((a) => !was.has(a.id) || !same(a, was.get(a.id)!)).map((a) => $state.snapshot(a));
-    return remove.length || add.length ? pool.tool<Uint8Array>('annotapply', { bytes: bytes.slice(), remove, add }) : bytes;
+    return remove.length || add.length ? pool.tool<Uint8Array>('annotapply', { bytes: bytes.slice(), remove, add, password }) : bytes;
   }
 
   // ---- undo: one step per action (a snapshot of the list before it)

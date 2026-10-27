@@ -23,14 +23,14 @@
   import MoreMenu from './MoreMenu.svelte';
 
   let { pool, sizes, name, bytes, modified, password, onOpen, onClose, onSave, onSaveAs, onReplace }: { pool: EnginePool; sizes: { w: number; h: number }[]; name: string; bytes: Uint8Array; modified: boolean; password?: string;
-    onOpen: () => void; onClose: () => void; onSave: () => void; onSaveAs: () => void; onReplace: (bytes: Uint8Array) => Promise<void> } = $props();
+    onOpen: () => void; onClose: () => void; onSave: () => void; onSaveAs: () => void; onReplace: (bytes: Uint8Array, password?: string) => Promise<void> } = $props();
   let mode = $state<'view' | 'organize' | 'edit' | 'sign' | 'convert' | 'protect' | 'redact' | 'forms' | 'ocr' | 'comment'>('view'), editScope = $state<'page' | 'document'>('page'), organize = $state<Organize>(), organized = $state(false), comment = $state<Comment>(), commented = $state(false), applying = $state(false);
   // leaving Organize applies its changes: the document is rebuilt and opened again in View
   async function task_(next: Key) {
     if (next === mode) return;
     if (next === 'organize' && mode === 'view') { mode = 'organize'; return; }
-    if (mode === 'organize' && organized && organize) { applying = true; try { await onReplace(await organize.build()); } catch { alert(t('toolFailed')); } finally { applying = false; } }
-    else if (mode === 'comment' && commented && comment) { applying = true; try { await onReplace(await comment.build()); } catch { alert(t('toolFailed')); } finally { applying = false; } }
+    if (mode === 'organize' && organized && organize) { applying = true; try { await replaceKept(await organize.build()); } catch { alert(t('toolFailed')); } finally { applying = false; } }
+    else if (mode === 'comment' && commented && comment) { applying = true; try { await replaceKept(await comment.build()); } catch { alert(t('toolFailed')); } finally { applying = false; } }
     else mode = (['edit', 'organize', 'sign', 'convert', 'protect', 'redact', 'forms', 'ocr', 'comment'].includes(next) ? next : 'view') as typeof mode;
   }
   // Edit: the page editor on the current page; saving puts the edited page in its place and opens the document again
@@ -41,10 +41,15 @@
     try { await onReplace(await pool.build({ items: sizes.map((_, i) => (i === editPage - 1 ? { doc: r.doc, page: 0 } : { doc: 0, page: i })) })); }
     finally { applying = false; }
   }
+  // Organize/Comment results come out plain; with the owner password known the file gets its protection back (algorithm, passwords, limits)
+  async function replaceKept(out: Uint8Array) {
+    if (!password || !(await pool.tool<{ owner: boolean } | null>('guard', { bytes: bytes.slice(), current: password }))?.owner) return onReplace(out);
+    await onReplace(await pool.keep(out), password);
+  }
   async function save(as = false) {
     if ((mode === 'edit' && editScope === 'page') || mode === 'sign') return; // the editor / signing mode saves its page first (Save page)
-    if (mode === 'organize' && organized && organize) { applying = true; try { await onReplace(await organize.build()); } catch { alert(t('toolFailed')); return; } finally { applying = false; } }
-    if (mode === 'comment' && commented && comment) { applying = true; try { await onReplace(await comment.build()); } catch { alert(t('toolFailed')); return; } finally { applying = false; } }
+    if (mode === 'organize' && organized && organize) { applying = true; try { await replaceKept(await organize.build()); } catch { alert(t('toolFailed')); return; } finally { applying = false; } }
+    if (mode === 'comment' && commented && comment) { applying = true; try { await replaceKept(await comment.build()); } catch { alert(t('toolFailed')); return; } finally { applying = false; } }
     if (as) onSaveAs(); else onSave();
   }
   let viewer = $state() as Viewer;
@@ -181,7 +186,7 @@
   {:else if mode === 'comment'}
   <div class="orgwrap">
     {#if applying}<p class="applying" role="status">{t('applying')}</p>{/if}
-    <Comment bind:this={comment} bind:changed={commented} {pool} {sizes} {bytes} />
+    <Comment bind:this={comment} bind:changed={commented} {pool} {sizes} {bytes} {password} />
   </div>
   {:else if mode === 'sign'}
   <div class="orgwrap">

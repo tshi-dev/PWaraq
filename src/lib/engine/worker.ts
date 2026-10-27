@@ -2,7 +2,7 @@
 // first out), so drawing again at another zoom or drawing a zoom tile does not re-read the PDF.
 import type * as MuPDF from '../../../engine/mupdf-wasm/dist/mupdf.js';
 import { assemble } from './assemble';
-import { compress, protect, unlock, guardOf, sealLikeSource } from './tools';
+import { compress, protect, unlock, guardOf, sealLikeSource, decrypt } from './tools';
 import { editPage, pageObjects, type Edit, type Own } from './editpage';
 import { findSpots, signPdf } from './sign';
 import { listSignatures, prepareSignature } from './signcert';
@@ -156,8 +156,8 @@ const ops: Record<string, (r: Req) => any> = {
   formfields(r) { return listFields(mupdf, r.bytes); },
   async fillform(r) { await loadFonts(); return fillForm(mupdf, r.bytes, r.answers, r.flatten, fonts!); },
   // comments: the comments of the file in `bytes`, the file with changes written, and the text between two points (snaps to real text)
-  annotlist(r) { return listAnnots(mupdf, r.bytes); },
-  async annotapply(r) { await loadFonts(); return applyAnnots(mupdf, r.bytes, r.remove, r.add, fonts!); }, // Tajawal for text boxes in Arabic
+  annotlist(r) { return listAnnots(mupdf, r.password ? decrypt(mupdf, r.bytes, r.password) : r.bytes); },
+  async annotapply(r) { await loadFonts(); return applyAnnots(mupdf, r.password ? decrypt(mupdf, r.bytes, r.password) : r.bytes, r.remove, r.add, fonts!); }, // Tajawal for text boxes in Arabic
   hilite(r) {
     const p = source(r.doc).doc.loadPage(r.page), st = p.toStructuredText('preserve-whitespace');
     try { return st.highlight(r.a, r.b).map((q) => [...q]); } finally { st.destroy(); p.destroy(); }
