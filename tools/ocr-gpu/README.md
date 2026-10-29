@@ -32,3 +32,15 @@ permission guard — see the report.
 
 ## Result (29 Oct 2026, report: `Archive-2026-10-12/reviews/OCR-GPU-2026-10-29.md`)
 Best fine-tune (2,002 unvowelled silver lines) 70.7 % words vs stock 72.6 % on the 413 real scans: not kept. It gains +9.3 words on full-tashkeel pages and +11.9 on old books but loses 2.8 on plain prints. Things that broke it, in order: missing config/dawgs in tesstrain output, 25 % crop padding, vowelled lines with marks stripped from the label, synthetic fonts.
+
+## Unattended run (no Claude, no tokens)
+`run-pipeline.ps1` does every step above in order and skips what is already done (re-run it after a reboot); `verdict.py` applies
+the keep rule (beats stock words overall, no slice drops > 1 point, placement >= 95 %) and `WORK\SUMMARY.md` gets the tables.
+`run-forever.ps1` runs it over the whole pool, 10,000 public-domain Commons pages (`get-commons.mjs`: works indexed by Arabic
+Wikisource, licence "Public domain" checked per file, the test set's work excluded) and a 5-variant sweep, retrying after failures.
+Start it detached; it keeps Windows awake only while it runs; nothing is wired into the app or pushed:
+```
+Start-Process powershell -WindowStyle Hidden -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','tools\ocr-gpu\run-forever.ps1'
+```
+Check: `..\ocr-gpu-work\pipeline.log` (progress), `SUMMARY.md` (verdicts), `DONE` (finished). Stop: end the hidden powershell /
+python / node processes whose command line mentions `ocr-gpu`.

@@ -49,7 +49,13 @@ def read(imgs, max_new):
 
 if a.lines:
     jobs = json.load(open(a.lines, encoding='utf8')); seen = set()
-    if os.path.exists(a.out): seen = {json.loads(l)['id'] for l in open(a.out, encoding='utf8') if l.strip()}
+    if os.path.exists(a.out):
+        ok = []
+        for l in open(a.out, encoding='utf8'):
+            try: ok.append(json.loads(l))
+            except ValueError: pass  # a line cut short by a reboot: read again
+        seen = {j['id'] for j in ok}
+        with open(a.out, 'w', encoding='utf8') as o: o.writelines(json.dumps(j, ensure_ascii=False) + chr(10) for j in ok)
     jobs = [j for j in jobs if j['id'] not in seen]
     import random; random.Random(7).shuffle(jobs)  # any stopping point is an unbiased sample ...
     jobs = [j for i in range(0, len(jobs), 256) for j in sorted(jobs[i:i + 256], key=lambda j: j['w'])]  # ... and similar widths still batch together

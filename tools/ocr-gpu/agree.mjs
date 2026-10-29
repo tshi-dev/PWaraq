@@ -7,8 +7,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { norm, editDistance } from './textcmp.mjs';
 const arg = (k, d) => { const i = process.argv.indexOf('--' + k); return i < 0 ? d : process.argv[i + 1]; };
-const [fa, fb] = process.argv.slice(2).filter((a) => a !== '--list'), work = path.resolve(import.meta.dirname, '..', '..', arg('work', '../ocr-gpu-work')), maxCer = +arg('cer', 0.02);
-const load = (f) => new Map(fs.readFileSync(f, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)).map((j) => [j.id, j.text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()]));
+const pos = process.argv.slice(2), flag0 = pos.findIndex((a) => a.startsWith('--')), [fa, fb] = flag0 < 0 ? pos : pos.slice(0, flag0); // teacher files come before the first --flag
+const work = path.resolve(import.meta.dirname, '..', '..', arg('work', '../ocr-gpu-work')), maxCer = +arg('cer', 0.02);
+const load = (f) => new Map(fs.readFileSync(f, 'utf8').split('\n').filter(Boolean).flatMap((l) => { try { return [JSON.parse(l)]; } catch { return []; } }).map((j) => [j.id, j.text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()]));
 // --plain: only lines both teachers read without tashkeel (under 2 % marks): vowelled lines put marks next to the dotted letters, and a fine-tune on them learned to drop dotted letters
 const marks = (s) => (s.match(/[ً-ْٰ]/g) || []).length / Math.max(1, s.length), plain = process.argv.includes('--plain');
 const A = load(fa), B = fb ? load(fb) : null, jobs = JSON.parse(fs.readFileSync(path.join(work, 'pool', arg('jobs', 'lines.list.json')), 'utf8'));
