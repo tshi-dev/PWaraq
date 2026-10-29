@@ -17,3 +17,4 @@ tests/fixtures/ocr/v3/
 dist-app/
 .venv-gpu/
 tools/ocr-gpu/work/
+__pycache__/

@@ -34,9 +34,9 @@ if a.model == 'qari':
     proc = AutoProcessor.from_pretrained(rid); proc.tokenizer.padding_side = 'left'
     prompt = LINE_QARI if a.lines else PAGE_QARI; extra = {'repetition_penalty': 1.05}
 else:  # Qari-OCR 0.4.0: a LoRA on Qwen3-VL-4B-Instruct, the base loaded in 4 bit so it fits next to the desktop in 8 GB
-    from transformers import AutoModelForVision2Seq, AutoProcessor, BitsAndBytesConfig
+    from transformers import AutoModelForImageTextToText, AutoProcessor, BitsAndBytesConfig
     rid = 'NAMAA-Space/Qari-OCR-0.4.0-VL-4B-Instruct'
-    model = AutoModelForVision2Seq.from_pretrained(rid, device_map='cuda', quantization_config=BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type='nf4', bnb_4bit_compute_dtype=torch.float16))
+    model = AutoModelForImageTextToText.from_pretrained(rid, device_map='cuda', quantization_config=BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type='nf4', bnb_4bit_compute_dtype=torch.float16))
     proc = AutoProcessor.from_pretrained(rid); proc.tokenizer.padding_side = 'left'
     prompt = 'Free OCR.'; extra = {}  # the model card's prompt
 
@@ -51,7 +51,8 @@ if a.lines:
     jobs = json.load(open(a.lines, encoding='utf8')); seen = set()
     if os.path.exists(a.out): seen = {json.loads(l)['id'] for l in open(a.out, encoding='utf8') if l.strip()}
     jobs = [j for j in jobs if j['id'] not in seen]
-    jobs.sort(key=lambda j: j['w'])  # similar widths batch together (less padding)
+    import random; random.Random(7).shuffle(jobs)  # any stopping point is an unbiased sample ...
+    jobs = [j for i in range(0, len(jobs), 256) for j in sorted(jobs[i:i + 256], key=lambda j: j['w'])]  # ... and similar widths still batch together
     t0 = time.time()
     with open(a.out, 'a', encoding='utf8') as o:
         for i in range(0, len(jobs), a.batch):
