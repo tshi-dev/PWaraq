@@ -55,6 +55,11 @@ Research-ranked features per mode (owner to confirm order):
 | (later) | local AI summarise/translate (WebLLM, opt-in download); pen/handwriting notes; accessibility tagging | L |
 Moat: Arabic/RTL is still broken in pdf.js, Stirling, PDFCraft (issues cited in the memo) — keep proving Arabic quality in every new feature.
 
+
+## OCR on the owner's GPU (29 Oct 2026) — report Archive-2026-10-12/reviews/OCR-GPU-2026-10-29.md
+Round 1: Qari-OCR (Apache-2.0) as teacher on the RTX 3060 Ti; 4,722 agreed lines; fine-tuned Tesseract `ara` lost overall (70.7 vs 72.6 % words, 413 scans) → **not shipped**. It wins on vowelled text (+9.3 words full tashkeel, +11.9 old books). Fixed a measuring-tool bug (6d1327c: `--ara <model>` silently used stock). Training pool was CC BY-NC-ND → must not ship anything trained on it.
+Next options (owner): (a) licence-clean pool: split Misraj (Apache-2.0) 300 train / 100 test + public-domain scans; (b) a vowelled-text model picked automatically per page (marks ratio); (c) allow the official llama.cpp CUDA build (Surya on GPU) and/or dots.ocr's remote code — both were blocked by the session guard.
+
 ## Phase 2 — iPhone / iPad (start after beta 3; parallel with Phase 1 research)
 | # | Step | Who | Notes |
 |---|---|---|---|
