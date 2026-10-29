@@ -1,5 +1,5 @@
 // Line boxes for the silver-label pool, from the shipped Tesseract `ara` model (the pipeline's own line splitter):
-//   node tools/ocr-gpu/split-lines.mjs [--work ../ocr-gpu-work]   → WORK/pool/lines.json  [{page, w, h, lines: [{x0,y0,x1,y1,tess}]}]
+//   node tools/ocr-gpu/split-lines.mjs [--work ../ocr-gpu-work] [--max N]   → WORK/pool/lines.json  [{page, w, h, lines: [{x0,y0,x1,y1,tess}]}]
 // tools/ocr-gpu/crop_lines.py then cuts the line pictures. Pages already in lines.json are skipped (resumable).
 import fs from 'node:fs';
 import path from 'node:path';
@@ -11,8 +11,10 @@ const out = path.join(dir, 'lines.json'), have = fs.existsSync(out) ? JSON.parse
 const T = createRequire(import.meta.url)('tesseract.js');
 const w = await T.createWorker('ara', 1, { langPath: path.join(root, 'public', 'ocr'), gzip: true, cacheMethod: 'none' });
 await w.setParameters({ tessedit_pageseg_mode: '3', preserve_interword_spaces: '1' });
+let left = +arg('max', Infinity); // --max N: at most N new pages a run, so the GPU rounds of run-forever.ps1 start soon
 for (const f of fs.readdirSync(path.join(dir, 'pages')).filter((f) => f.endsWith('.jpg')).sort()) {
   if (seen.has(f)) continue;
+  if (left-- <= 0) break;
   const { data } = await w.recognize(fs.readFileSync(path.join(dir, 'pages', f)), {}, { blocks: true });
   const lines = linesOf(data).filter((l) => l.words.length >= 3).map((l) => ({
     x0: Math.min(...l.words.map((x) => x.x0)), y0: Math.min(...l.words.map((x) => x.y0)), x1: Math.max(...l.words.map((x) => x.x1)), y1: Math.max(...l.words.map((x) => x.y1)), tess: l.words.map((x) => x.text).join(' '),

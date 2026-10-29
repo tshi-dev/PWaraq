@@ -4,7 +4,7 @@
 # and WORK\pipeline.log. Nothing is wired into the app and nothing is pushed: a KEEP verdict only tells you to review (release gate).
 # Needs: .venv-gpu (see README), WSL Ubuntu with tesseract-ocr + tesstrain tools (README), node deps, public/ocr/ara_best.traineddata.gz
 # (node tools/get-ocr.mjs --best), the real test set (node tools/get-ocr-set.mjs --all --wikisource), and a stock baseline log (made here if missing).
-param([int]$CommonsPages = 0, [int]$Every = 5, [int[]]$Offsets = @(0, 2), [string[]]$Variants = @('Q:5000:0.0001'), [string]$Work = '', [string]$ExtraGt = '', [switch]$Full)
+param([int]$SplitMax = 400, [int]$CommonsPages = 0, [int]$Every = 5, [int[]]$Offsets = @(0, 2), [string[]]$Variants = @('Q:5000:0.0001'), [string]$Work = '', [string]$ExtraGt = '', [switch]$Full)
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 if (-not $Work) { $Work = Join-Path (Split-Path $root) 'ocr-gpu-work' }
@@ -24,7 +24,7 @@ foreach ($need in @($py, "$root\public\ocr\ara_best.traineddata.gz", "$root\test
 # 1 pool pages (public scanned book pages, never the test rows) and 2 their line boxes
 foreach ($o in $Offsets) { if (-not (Test-Path "$Work\pool\pool-$Every-$o.done")) { Run node @('tools/ocr-gpu/get-pool.mjs', '--every', $Every, '--offset', $o, '--work', $Work); New-Item "$Work\pool\pool-$Every-$o.done" -ItemType File | Out-Null } }
 if ($CommonsPages -gt 0 -and -not (Test-Path "$Work\pool\commons-$CommonsPages.done")) { Run node @('tools/ocr-gpu/get-commons.mjs', '--pages', $CommonsPages, '--work', $Work); New-Item "$Work\pool\commons-$CommonsPages.done" -ItemType File | Out-Null }   # public-domain book scans (Wikimedia Commons)
-Run node @('tools/ocr-gpu/split-lines.mjs', '--work', $Work)          # resumable: skips pages already in lines.json
+Run node @('tools/ocr-gpu/split-lines.mjs', '--work', $Work, '--max', $SplitMax)          # resumable: skips pages already in lines.json; at most SplitMax new pages a run (pass a big number for all)
 # 3 tight line crops (2 % padding)
 Run $py @('-I', 'tools/ocr-gpu/crop_lines.py', $Work, '0.02', 'lines02')
 $jobs = "$Work\pool\lines02.list.json"
