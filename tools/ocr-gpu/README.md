@@ -21,3 +21,14 @@ permission guard — see the report.
 ## Files
 - `read_pages.py` — a teacher reads page pictures (`--model qari|qari4`; `--lines` for line pictures) → `DIR/<name>.txt`, `times.json`.
 - `score.mjs` — words right / chars right per slice, same text comparison as `tools/ocr-accuracy.mjs`.
+
+## Workflow (data and models live outside git, in `../ocr-gpu-work/`)
+1. `node tools/ocr-gpu/get-pool.mjs --every 5 [--offset 2]` — pool pages (freococo/ocr_arabic_books, CC BY-NC-ND 4.0; the 8 test rows skipped).
+2. `node tools/ocr-gpu/split-lines.mjs` → `.venv-gpu\Scripts\python -I tools\ocr-gpu\crop_lines.py WORK 0.02 lines02` (2 % padding: tight crops matter).
+3. `read_pages.py --model qari --lines WORK/pool/lines02.list.json --out WORK/pool/qari.jsonl`, then `agree.mjs A.jsonl --list` (shortlist) and `read_pages.py --model qari4 ...` for the second teacher.
+4. `node tools/ocr-gpu/agree.mjs qari.jsonl qari4.jsonl --jobs lines02.list.json --out gt02p --plain` (`--plain` = unvowelled lines only).
+5. WSL: `make training MODEL_NAME=x START_MODEL=ara TESSDATA=<dir with ara_best as ara.traineddata> LANG_TYPE=RTL PSM=13 GROUND_TRUTH_DIR=data/gt02p-ground-truth MAX_ITERATIONS=5000 LEARNING_RATE=0.0001`, then `export_ckpt.sh` / `package.sh` (tesstrain's own output has no `config` or dawgs: always repackage).
+6. `node tools/ocr-accuracy.mjs --only real/s,real/m,real/w --ara ara_x` and `python tools/ocr-gpu/slices.py base.log new.log`.
+
+## Result (29 Oct 2026, report: `Archive-2026-10-12/reviews/OCR-GPU-2026-10-29.md`)
+Best fine-tune (2,002 unvowelled silver lines) 70.7 % words vs stock 72.6 % on the 413 real scans: not kept. It gains +9.3 words on full-tashkeel pages and +11.9 on old books but loses 2.8 on plain prints. Things that broke it, in order: missing config/dawgs in tesstrain output, 25 % crop padding, vowelled lines with marks stripped from the label, synthetic fonts.
