@@ -36,7 +36,7 @@ Best fine-tune (2,002 unvowelled silver lines) 70.7 % words vs stock 72.6 % on t
 ## Unattended run (no Claude, no tokens)
 `run-pipeline.ps1` does every step above in order and skips what is already done (re-run it after a reboot); `verdict.py` applies
 the keep rule (beats stock words overall, no slice drops > 1 point, placement >= 95 %) and `WORK\SUMMARY.md` gets the tables.
-`run-forever.ps1` runs it over the whole pool, `-Pages` (50,000) public-domain Commons pages (`get-commons.mjs`: works indexed by Arabic
+`run-forever.ps1` runs it over the whole pool, `-Pages` (140,000; at most `-Per` 500 a work) public-domain Commons pages (`get-commons.mjs`: works indexed by Arabic
 Wikisource, licence "Public domain" checked per file, the test set's work excluded) and a 5-variant sweep, retrying after failures.
 Start it detached; it keeps Windows awake only while it runs; nothing is wired into the app or pushed:
 ```

@@ -47,7 +47,7 @@ if ($gpu) { $g = $gpu.Split(',').Trim(); Write-Host "  GPU: $($g[0]) % busy, $($
 
 Head 'Data so far'
 $pages = Files "$work\pool\pages" '*.jpg'; $commons = Files "$work\pool\pages" 'c-*.jpg'
-"  book pages downloaded : {0:N0}  ({1:N0} public-domain Commons, target 50,000)" -f $pages, $commons
+"  book pages downloaded : {0:N0}  ({1:N0} public-domain Commons, target about 147,000)" -f $pages, $commons
 "  lines read by teacher A: {0:N0}" -f (Count "$work\pool\qari.jsonl")
 "  lines read by teacher B: {0:N0}" -f (Count "$work\pool\qari4.jsonl")
 "  silver training lines  : {0:N0}  (both teachers agree)" -f (Files "$work\gt02p" '*.gt.txt')
@@ -71,7 +71,7 @@ Head 'Disk'
 Get-PSDrive C, D -ErrorAction SilentlyContinue | ForEach-Object { $f = [math]::Round($_.Free / 1GB); Write-Host ("  {0}: {1} GB free" -f $_.Name, $f) -ForegroundColor $(if ($_.Name -eq 'C' -and $f -lt 25) { 'Red' } else { 'Gray' }) }
 
 Head 'Plan'
-'  until about 15 Nov: download pages and let the two teachers read them (GPU)'
+'  until about 13 Nov: download up to 137,500 pages and let the two teachers read them (GPU, about 12,000 pages a day)'
 '  about 15-16 Nov  : train and test 5 versions (CPU, about 8 h), then DONE'
 '  a KEEP still needs a check in the app and your yes before it ships'
 ''

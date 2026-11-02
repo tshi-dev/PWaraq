@@ -4,15 +4,15 @@
 # Every step is resumable and a failed round is retried 10 minutes later (at most 30 failures). Start it detached:
 #   Start-Process powershell -WindowStyle Hidden -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','tools\ocr-gpu\run-forever.ps1'
 # Check WORK\pipeline.log (progress), WORK\fetch.log (downloads), WORK\SUMMARY.md (verdicts), WORK\DONE (finished).
-# WORK defaults to D:\ocr-gpu-work (2 TB drive: a two-week run is about 60 GB and nothing is ever deleted); -Pages sets the Commons target.
-param([string]$Work = 'D:\ocr-gpu-work', [int]$Pages = 50000)
+# WORK defaults to D:\ocr-gpu-work (2 TB drive: a two-week run is about 150 GB and nothing is ever deleted); -Pages / -Per set the Commons target (140,000 / 500 a work: about 11 days of reading at 12,000 pages a day).
+param([string]$Work = 'D:\ocr-gpu-work', [int]$Pages = 140000, [int]$Per = 500)
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path; $work = $Work
 New-Item -ItemType Directory -Force $work | Out-Null; $log = Join-Path $work 'pipeline.log'
 function Note($m) { [IO.File]::AppendAllText($log, (Get-Date -Format HH:mm:ss) + " run-forever: $m`r`n") }   # no -f: messages may hold braces
 if (Test-Path (Join-Path $work 'DONE')) { exit }   # finished earlier: delete DONE to run again
 if (Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -like '*run-forever.ps1*' }) { exit }   # already running
 Set-Location $root
-$fetchCmd = "node tools/ocr-gpu/get-commons.mjs --pages $Pages --per 100 --work ""$work"""   # freococo is complete (all 5 offsets of get-pool.mjs --every 5 are in the pool)
+$fetchCmd = "node tools/ocr-gpu/get-commons.mjs --pages $Pages --per $Per --work ""$work"""   # freococo is complete (all 5 offsets of get-pool.mjs --every 5 are in the pool)
 $fetch = Start-Process cmd -ArgumentList '/c', "$fetchCmd > ""$work\fetch.log"" 2>&1" -WindowStyle Hidden -PassThru
 Note "downloads started (pid $($fetch.Id))"
 $fails = 0; $round = 0
