@@ -3,7 +3,7 @@
 # The desktop shortcut "OCR training status" runs this.
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $work = if (Test-Path 'D:\ocr-gpu-work\pool') { 'D:\ocr-gpu-work' } else { Join-Path (Split-Path $root) 'ocr-gpu-work' }
-function Count($f) { if (Test-Path $f) { [Linq.Enumerable]::Count([IO.File]::ReadLines($f)) } else { 0 } }
+function Count($f) { if (-not (Test-Path $f)) { return 0 }; $r = New-Object IO.StreamReader([IO.FileStream]::new($f, 'Open', 'Read', 'ReadWrite')); $n = 0; while ($null -ne $r.ReadLine()) { $n++ }; $r.Close(); $n }   # ReadWrite: a teacher is appending to it
 function Files($d, $p) { if (Test-Path $d) { [Linq.Enumerable]::Count([IO.Directory]::EnumerateFiles($d, $p)) } else { 0 } }
 function Head($t) { ''; Write-Host $t -ForegroundColor Cyan }
 $procs = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine } | ForEach-Object { $_.CommandLine }
@@ -71,7 +71,7 @@ Head 'Disk'
 Get-PSDrive C, D -ErrorAction SilentlyContinue | ForEach-Object { $f = [math]::Round($_.Free / 1GB); Write-Host ("  {0}: {1} GB free" -f $_.Name, $f) -ForegroundColor $(if ($_.Name -eq 'C' -and $f -lt 25) { 'Red' } else { 'Gray' }) }
 
 Head 'Plan'
-'  until about 13 Nov: download up to 137,500 pages and let the two teachers read them (GPU, about 12,000 pages a day)'
-'  about 15-16 Nov  : train and test 6 versions (CPU, about 10 h; F adds modern-font lines), then DONE'
+'  until Sat 14 Nov 00:00: the two teachers read pages (GPU, about 4,000 pages a day); downloads (up to 137,500 pages) run ahead and are all kept'
+'  14-15 Nov           : train and test 6 versions (CPU, about 10 h; F adds modern-font lines), then DONE'
 '  a KEEP still needs a check in the app and your yes before it ships'
 ''
