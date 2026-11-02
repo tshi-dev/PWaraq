@@ -10,6 +10,7 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 if (-not $Work) { $Work = Join-Path (Split-Path $root) 'ocr-gpu-work' }
 New-Item -ItemType Directory -Force $Work, "$Work\pool", "$Work\results", "$Work\models" | Out-Null
 $py = Join-Path $root '.venv-gpu\Scripts\python.exe'; $log = Join-Path $Work 'pipeline.log'
+if (Test-Path 'D:\hf-cache') { $env:HF_HOME = 'D:\hf-cache' }   # the teachers' downloads (33 GB) live on D:
 $env:HF_HUB_DISABLE_XET = '1'; $env:PYTHONIOENCODING = 'utf8'
 function Say($m) { $l = '{0:HH:mm:ss} {1}' -f (Get-Date), $m; Write-Host $l; [IO.File]::AppendAllText($log, "$l`r`n") }   # open-append-close: the log stays readable while a stage runs
 function Run($exe, $argv) { Say ("> $exe " + ($argv -join ' ')); $ErrorActionPreference = 'Continue'; & $exe @argv 2>&1 | ForEach-Object { [IO.File]::AppendAllText($log, "$_`r`n") }; if ($LASTEXITCODE -ne 0) { throw "$exe failed ($LASTEXITCODE)" } }   # PS 5.1 turns native stderr into errors: judge by exit code, keep all output in the log

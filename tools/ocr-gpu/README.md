@@ -36,11 +36,13 @@ Best fine-tune (2,002 unvowelled silver lines) 70.7 % words vs stock 72.6 % on t
 ## Unattended run (no Claude, no tokens)
 `run-pipeline.ps1` does every step above in order and skips what is already done (re-run it after a reboot); `verdict.py` applies
 the keep rule (beats stock words overall, no slice drops > 1 point, placement >= 95 %) and `WORK\SUMMARY.md` gets the tables.
-`run-forever.ps1` runs it over the whole pool, 10,000 public-domain Commons pages (`get-commons.mjs`: works indexed by Arabic
+`run-forever.ps1` runs it over the whole pool, `-Pages` (50,000) public-domain Commons pages (`get-commons.mjs`: works indexed by Arabic
 Wikisource, licence "Public domain" checked per file, the test set's work excluded) and a 5-variant sweep, retrying after failures.
 Start it detached; it keeps Windows awake only while it runs; nothing is wired into the app or pushed:
 ```
 Start-Process powershell -WindowStyle Hidden -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','tools\ocr-gpu\run-forever.ps1'
 ```
-Check: `..\ocr-gpu-work\pipeline.log` (progress), `SUMMARY.md` (verdicts), `DONE` (finished). Stop: end the hidden powershell /
+Since 2 Nov the work folder is `D:\ocr-gpu-work` (`-Work`; 2 TB drive, nothing is deleted) and the teachers' downloads are `D:\hf-cache`
+(`HF_HOME`, set by `run-pipeline.ps1`). `disk-guard.ps1` frees the two unused model downloads if C: ever falls under 25 GB.
+Check: `D:\ocr-gpu-work\pipeline.log` (progress), `SUMMARY.md` (verdicts), `DONE` (finished). Stop: end the hidden powershell /
 python / node processes whose command line mentions `ocr-gpu`.
