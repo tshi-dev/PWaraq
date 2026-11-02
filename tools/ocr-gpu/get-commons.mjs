@@ -9,7 +9,7 @@ const work = path.resolve(import.meta.dirname, '..', '..', arg('work', '../ocr-g
 const TEST_WORK = 'ابن الرومي - حياته من شعره (1931) - العقاد.pdf'; // w-01 of the test set (tools/get-ocr-set.mjs)
 fs.mkdirSync(pages, { recursive: true });
 const UA = { headers: { 'user-agent': 'WaraqOcrTraining/1.0 (local OCR research, github.com/tshi-dev/PWaraq)' } }, wait = (ms) => new Promise((r) => setTimeout(r, ms));
-const get = async (url, json = true) => { for (let i = 0; ; i++) { await wait(800); try { const r = await fetch(url, { ...UA, signal: AbortSignal.timeout(60000) }); if (r.ok) return json ? r.json() : Buffer.from(await r.arrayBuffer()); if (r.status >= 400 && r.status < 500 && r.status !== 429 || i > 6) throw new Error(url + ' → ' + r.status); } catch (e) { if (i > 6) throw e; } await wait(3000 * 2 ** i); } };
+const get = async (url, json = true) => { for (let i = 0; ; i++) { await wait(800); try { const r = await fetch(url, { ...UA, signal: AbortSignal.timeout(60000) }); if (r.ok) return json ? r.json() : Buffer.from(await r.arrayBuffer()); if (r.status >= 400 && r.status < 500 && r.status !== 429 || r.status >= 500 && i >= 2 || i > 6) throw Object.assign(new Error(url + ' → ' + r.status), { final: true }); } catch (e) { if (e.final || i > 6) throw e; } await wait(3000 * 2 ** i); } };
 const api = (host, p) => get(`https://${host}/w/api.php?format=json&${p}`);
 const listFile = path.join(work, 'pool', 'commons.json');
 let files = fs.existsSync(listFile) ? JSON.parse(fs.readFileSync(listFile, 'utf8')).files : null;
