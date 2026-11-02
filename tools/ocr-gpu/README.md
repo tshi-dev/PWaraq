@@ -44,5 +44,7 @@ Start-Process powershell -WindowStyle Hidden -ArgumentList '-NoProfile','-Execut
 ```
 Since 2 Nov the work folder is `D:\ocr-gpu-work` (`-Work`; 2 TB drive, nothing is deleted) and the teachers' downloads are `D:\hf-cache`
 (`HF_HOME`, set by `run-pipeline.ps1`). `disk-guard.ps1` frees the two unused model downloads if C: ever falls under 25 GB.
+Status in plain words: `tools\ocr-gpu\status.ps1` (desktop shortcut "OCR training status"). Moving the HF cache: robocopy /MOVE
+breaks its snapshot links (blobs move first); re-link with hf_hub_download, and leave a junction at the old place.
 Check: `D:\ocr-gpu-work\pipeline.log` (progress), `SUMMARY.md` (verdicts), `DONE` (finished). Stop: end the hidden powershell /
 python / node processes whose command line mentions `ocr-gpu`.
