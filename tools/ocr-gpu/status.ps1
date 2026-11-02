@@ -33,6 +33,8 @@ elseif (-not $driver -and -not $waiter) {
   Write-Host '    powershell -NoProfile -ExecutionPolicy Bypass -File tools\ocr-gpu\run-forever.ps1' -ForegroundColor Red
 }
 $log = "$work\pipeline.log"
+$lastRound = Get-Content $log -Tail 3000 -ErrorAction SilentlyContinue | Where-Object { $_ -like '*run-forever: round*' -or $_ -like '*sweep FAILED*' } | Select-Object -Last 1
+if ($lastRound -like '*FAILED*') { Write-Host "  ! the last round FAILED: $($lastRound.Substring(0, [math]::Min(130, $lastRound.Length)))" -ForegroundColor Red }
 if (Test-Path $log) {
   $age = [int]((Get-Date) - (Get-Item $log).LastWriteTime).TotalMinutes
   $last = "$(Get-Content $log -Tail 1)" -replace '/mnt/c/Users/Abdullah/Documents/ChatGPT/PDF Open Source/', '' -replace 'C:\\Users\\Abdullah\\Documents\\ChatGPT\\PDF Open Source\\', ''
