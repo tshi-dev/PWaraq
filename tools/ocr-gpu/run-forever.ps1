@@ -26,7 +26,7 @@ while ($true) {   # GPU rounds over the pages that are there
 }
 for ($try = 1; $try -le 30; $try++) {   # the sweep: train in WSL, measure, verdicts in SUMMARY.md
   try {
-    & (Join-Path $PSScriptRoot 'run-pipeline.ps1') -Work $work -Offsets @() -Full -Variants 'A:10000:0.0001','B:20000:0.00005','C:6000:0.0002','D:30000:0.00005','E:10000:0.00003'
+    & (Join-Path $PSScriptRoot 'run-pipeline.ps1') -Work $work -Offsets @() -Full -Variants 'A:10000:0.0001','B:20000:0.00005','C:6000:0.0002','D:30000:0.00005','E:10000:0.00003','F:30000:0.00005:modern'   # F = D + 30 % modern-font lines (synth.py modern)
     Note 'finished'; Set-Content (Join-Path $work 'DONE') (Get-Date); break
   } catch { Note "sweep FAILED: $($_.Exception.Message)"; Start-Sleep 600 }
 }

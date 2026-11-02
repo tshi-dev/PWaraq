@@ -72,6 +72,6 @@ Get-PSDrive C, D -ErrorAction SilentlyContinue | ForEach-Object { $f = [math]::R
 
 Head 'Plan'
 '  until about 13 Nov: download up to 137,500 pages and let the two teachers read them (GPU, about 12,000 pages a day)'
-'  about 15-16 Nov  : train and test 5 versions (CPU, about 8 h), then DONE'
+'  about 15-16 Nov  : train and test 6 versions (CPU, about 10 h; F adds modern-font lines), then DONE'
 '  a KEEP still needs a check in the app and your yes before it ships'
 ''

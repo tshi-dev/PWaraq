@@ -1,5 +1,5 @@
 # One command, no model and no tokens needed: teachers -> silver labels -> Tesseract fine-tune -> measure -> keep/drop verdict.
-#   powershell -ExecutionPolicy Bypass -File tools\ocr-gpu\run-pipeline.ps1 [-CommonsPages 10000] [-Every 5] [-Offsets 0,2] [-Variants Q:5000:0.0001,R:3000:0.00005] [-Full]
+#   powershell -ExecutionPolicy Bypass -File tools\ocr-gpu\run-pipeline.ps1 [-CommonsPages 10000] [-Every 5] [-Offsets 0,2] [-Variants Q:5000:0.0001,R:3000:0.00005,F:30000:0.00005:modern] [-Full]
 # Every stage is resumable (it skips what already exists), so a reboot or Ctrl+C is harmless: run it again. Output: WORK\SUMMARY.md
 # and WORK\pipeline.log. Nothing is wired into the app and nothing is pushed: a KEEP verdict only tells you to review (release gate).
 # Needs: .venv-gpu (see README), WSL Ubuntu with tesseract-ocr + tesstrain tools (README), node deps, public/ocr/ara_best.traineddata.gz
@@ -45,9 +45,14 @@ if (-not (Test-Path $base) -or -not (Select-String -Path $base -Pattern '^all pa
 $ocrDir = ToWslPath "$root\public\ocr"; $gtW = ToWslPath "$Work\gt02p"; $trainSh = ToWslPath "$root\tools\ocr-gpu\train.sh"
 $report = @("# OCR GPU pipeline summary ($(Get-Date -Format 'yyyy-MM-dd HH:mm'))", '', "silver lines: $n (teachers Qari v0.3 + Qari 4B, CER <= 2 %, unvowelled)", '')
 foreach ($v in $Variants) {
-  $name, $it, $lr = $v.Split(':'); $model = "ara_${name}p"
+  $name, $it, $lr, $mix = $v.Split(':'); $model = "ara_${name}p"; $extra = @()
+  if ($mix -eq 'modern') {   # + modern-font lines rendered from the silver texts, 30 % of the mix (synth.py modern)
+    $synth = "$Work\synth-modern-$n"; New-Item -ItemType Directory -Force $synth | Out-Null
+    if (-not (Test-Path "$synth\done")) { Run wsl.exe @('-e', 'python3', (ToWslPath "$root\tools\ocr-gpu\synth.py"), $gtW, (ToWslPath $synth), [math]::Ceiling($n * 3 / 7), 'modern'); New-Item "$synth\done" -ItemType File | Out-Null }
+    $extra = @(ToWslPath $synth)
+  }
   if (-not (Test-Path "$Work\models\$model.traineddata.gz")) {
-    Run wsl.exe @('-e', 'bash', $trainSh, "wq$name", $gtW, $it, $lr, $ocrDir)
+    Run wsl.exe (@('-e', 'bash', $trainSh, "wq$name", $gtW, $it, $lr, $ocrDir) + $extra)
     Move-Item "$root\public\ocr\ara_wq${name}p.traineddata.gz" "$Work\models\$model.traineddata.gz" -Force
   }
   Copy-Item "$Work\models\$model.traineddata.gz" "$root\public\ocr\$model.traineddata.gz" -Force   # git-ignored; removed again below
