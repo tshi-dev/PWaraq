@@ -26,3 +26,6 @@ Session titles: `W: <area> — <one-line job>` (e.g. `W: Edit — white cover in
 
 ## Cleanup (owner, 27 Oct 2026)
 Archive every worker session within 4 hours of its report being checked (memos read, commits verified). If one refuses ("live work"), turn its Remote Control off and retry; if it still refuses, list it for the owner to archive from the sidebar.
+
+## Design (2 Nov 2026)
+Every Builder that touches UI loads the `waraq-design` skill (~/.claude/skills/waraq-design, copy in waraq-next/docs/waraq-design) and, for new screens, `interface-design`. Owner rules in waraq-design win over any other design skill. `unslop` = report-first audits only; `hallmark` = website pages only.
