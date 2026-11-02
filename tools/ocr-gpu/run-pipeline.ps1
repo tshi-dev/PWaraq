@@ -15,7 +15,7 @@ $env:HF_HUB_DISABLE_XET = '1'; $env:PYTHONIOENCODING = 'utf8'
 function Say($m) { $l = '{0:HH:mm:ss} {1}' -f (Get-Date), $m; Write-Host $l; [IO.File]::AppendAllText($log, "$l`r`n") }   # open-append-close: the log stays readable while a stage runs
 function Run($exe, $argv) { Say ("> $exe " + ($argv -join ' ')); $ErrorActionPreference = 'Continue'; & $exe @argv 2>&1 | ForEach-Object { [IO.File]::AppendAllText($log, "$_`r`n") }; if ($LASTEXITCODE -ne 0) { throw "$exe failed ($LASTEXITCODE)" } }   # PS 5.1 turns native stderr into errors: judge by exit code, keep all output in the log
 function Lines($f) { if (Test-Path $f) { (Get-Content $f | Measure-Object -Line).Lines } else { 0 } }
-function ToWslPath($p) { ((& wsl.exe wslpath -a $p) -replace "`0", '').Trim() }
+function ToWslPath($p) { $p = (Resolve-Path $p).Path; '/mnt/' + $p.Substring(0, 1).ToLower() + $p.Substring(2).Replace('\', '/') }   # by hand: wsl.exe wslpath mangles D:\ paths (the backslashes are eaten)
 Set-Location $root
 # keep Windows awake while this process lives (not a persistent power setting; released when the process ends)
 Add-Type -Namespace W -Name K -MemberDefinition '[DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint f);'

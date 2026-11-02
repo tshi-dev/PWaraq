@@ -31,12 +31,12 @@ if (!files) { // every indexed work, then its Commons licence and page count, 10
 console.log(files.length, 'public-domain works,', files.reduce((a, f) => a + f.pages, 0), 'pages in all');
 // a spread of pages from every work (covers and the last pages skipped), round-robin so any stopping point is varied
 const plan = files.map((f) => { const lo = Math.min(10, f.pages - 1), n = Math.min(per, f.pages - lo), step = (f.pages - lo) / n; return Array.from({ length: n }, (_, k) => ({ f, page: lo + 1 + Math.floor(k * step) })); });
-let got = 0;
+let got = 0; const bad = new Set(); // a work that failed once is skipped for the rest of the run (its retries cost minutes on every pass)
 for (let k = 0; got < want && plan.some((p) => p.length > k); k++) for (const p of plan) {
   if (got >= want) break;
-  const e = p[k]; if (!e) continue;
+  const e = p[k]; if (!e || bad.has(e.f.name)) continue;
   const out = path.join(pages, `c-${String(e.f.id).padStart(4, '0')}-${String(e.page).padStart(4, '0')}.jpg`);
-  if (!fs.existsSync(out)) { try { fs.writeFileSync(out, await get(`https://commons.wikimedia.org/w/thumb.php?f=${encodeURIComponent(e.f.name)}&page=${e.page}&width=1600`, false)); } catch (err) { console.log('skip', e.f.name, e.page, err.message); continue; } }
+  if (!fs.existsSync(out)) { try { fs.writeFileSync(out, await get(`https://commons.wikimedia.org/w/thumb.php?f=${encodeURIComponent(e.f.name)}&page=${e.page}&width=1600`, false)); } catch (err) { bad.add(e.f.name); console.log('skip', e.f.name, e.page, err.message); continue; } }
   if (++got % 200 === 0) console.log(got, 'pages');
 }
 console.log('done:', got, 'pages');

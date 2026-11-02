@@ -12,7 +12,7 @@ function Note($m) { [IO.File]::AppendAllText($log, (Get-Date -Format HH:mm:ss) +
 if (Test-Path (Join-Path $work 'DONE')) { exit }   # finished earlier: delete DONE to run again
 if (Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -like '*run-forever.ps1*' }) { exit }   # already running
 Set-Location $root
-$fetchCmd = "node tools/ocr-gpu/get-pool.mjs --every 5 --offset 1 --work ""$work"" & node tools/ocr-gpu/get-pool.mjs --every 5 --offset 3 --work ""$work"" & node tools/ocr-gpu/get-pool.mjs --every 5 --offset 4 --work ""$work"" & node tools/ocr-gpu/get-commons.mjs --pages $Pages --work ""$work"""
+$fetchCmd = "node tools/ocr-gpu/get-commons.mjs --pages $Pages --per 100 --work ""$work"""   # freococo is complete (all 5 offsets of get-pool.mjs --every 5 are in the pool)
 $fetch = Start-Process cmd -ArgumentList '/c', "$fetchCmd > ""$work\fetch.log"" 2>&1" -WindowStyle Hidden -PassThru
 Note "downloads started (pid $($fetch.Id))"
 $fails = 0; $round = 0
