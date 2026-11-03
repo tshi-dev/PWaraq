@@ -19,7 +19,7 @@ export type Meta = { title?: string; author?: string; subject?: string; lang?: '
 export type Source = { doc: MuPDF.Document; bytes: Uint8Array };
 
 export function assemble(m: typeof MuPDF, source: (id: number) => Source, b: Build, fonts?: () => Fonts): Uint8Array {
-  const out = new m.PDFDocument(), images = new Map<number, MuPDF.PDFObject>();
+  const out = new m.PDFDocument(), images = new Map<number, MuPDF.PDFObject>(), grafts = new Map<MuPDF.PDFDocument, MuPDF.PDFGraftMap>(), grafted: number[] = []; // one graft map per source: fonts, images and forms that pages share are copied once, not once per page
   const measuring = (t: string, size: number, bold: boolean) => widthOf(fonts!(), bold)(t, size); // long titles on cover and section pages wrap by it
   const page = (it: Item): TextPage | undefined => it.cover ? coverPage({ ...it.cover, measure: measuring }) : it.divider ? dividerPage({ ...it.divider, measure: measuring }) : it.toc ? tocPages(it.toc, widthOf(fonts!()))[0]
     : it.blank && it.paper && it.paper !== 'plain' ? paperPage(it.fit!.w, it.fit!.h, it.paper) : undefined;
@@ -52,7 +52,7 @@ export function assemble(m: typeof MuPDF, source: (id: number) => Source, b: Bui
     else if (it.blank) out.insertPage(-1, out.addPage([0, 0, it.fit!.w, it.fit!.h], 0, {}, ''));
     else {
       const s = source(it.doc!), pdf = s.doc.asPDF();
-      if (pdf) out.graftPage(-1, pdf, it.page!);
+      if (pdf) { if (!grafts.has(pdf)) grafts.set(pdf, out.newGraftMap()); grafts.get(pdf)!.graftPage(-1, pdf, it.page!); grafted[i] = [...grafts.keys()].indexOf(pdf); }
       else imagePage(m, out, images, it, s.bytes);
     }
     const p = out.findPage(i), r = p.getInheritable('Rotate');
@@ -90,6 +90,7 @@ export function assemble(m: typeof MuPDF, source: (id: number) => Source, b: Bui
   }
   if (writer || b.watermark?.text.trim()) out.subsetFonts(); // the bundled Tajawal weights are embedded whole (~120 KB each): keep only the letters used
   if (b.meta) writeMeta(out, b.meta);
+  if (grafts.size > 1) shareStreams(out, b.items.map((_, i) => grafted[i] ?? -1)); // grafted[i]: which file page i was copied from
   return out.saveToBuffer('garbage=compact').asUint8Array().slice();
 }
 
@@ -145,4 +146,42 @@ export function stamp(out: MuPDF.PDFDocument, p: MuPDF.PDFObject, ops: string, r
   if (contents.isArray()) contents.forEach((c) => all.push(c)); else if (!contents.isNull()) all.push(contents);
   all.push(out.addStream(`\nQ ${ops}\n`, {}));
   p.put('Contents', all);
+}
+
+/** Pages that come from a second file (an edited page) carry their own copy of every font, image and form the page shares with the
+ *  rest of the file: such a stream is pointed at the copy already there, so the page costs only what is new in it. `from[i]`: the
+ *  source of page i (-1: written by Waraq); the pages of the first source are the ones to match against. A stream matches when
+ *  its dictionary (what it points at, down to 3 levels) and its bytes are the same. */
+function shareStreams(out: MuPDF.PDFDocument, from: number[]) {
+  const first = from.find((d) => d >= 0)!, MIN = 1024, memo = new Map<number, string>();
+  const hash = (u: Uint8Array) => { let a = 0x811c9dc5, b = 0xdeadbeef; for (let i = 0; i < u.length; i++) { a = Math.imul(a ^ u[i], 16777619); b = Math.imul(b ^ u[i], 2654435761); } return (a >>> 0).toString(36) + (b >>> 0).toString(36) + u.length; };
+  const sig = (o: MuPDF.PDFObject, d = 3): string => {
+    if (o.isIndirect()) {
+      const n = o.asIndirect(), hit = memo.get(n); if (hit != null && d === 3) return hit;
+      const r = d ? sig(o.resolve(), d - 1) + (o.isStream() ? '#' + hash(o.readRawStream().asUint8Array()) : '') : '';
+      if (d === 3) memo.set(n, r);
+      return r;
+    }
+    if (o.isDictionary()) { const kv: string[] = []; o.forEach((v, k) => kv.push(k + sig(v, d))); return '<' + kv.sort().join(',') + '>'; }
+    if (o.isArray()) { const v: string[] = []; o.forEach((x) => v.push(sig(x, d))); return '[' + v.join(',') + ']'; }
+    return String(o);
+  };
+  // every large stream below a page's resources: its parent, key and the object (`go` descends into dictionaries, arrays and the dictionaries of streams)
+  const walk = (page: MuPDF.PDFObject, hit: (parent: MuPDF.PDFObject, key: number | string, o: MuPDF.PDFObject) => boolean) => {
+    const seen = new Set<number>();
+    const go = (parent: MuPDF.PDFObject, key: number | string, o: MuPDF.PDFObject) => {
+      if (o.isIndirect()) { const n = o.asIndirect(); if (seen.has(n)) return; seen.add(n); }
+      if (o.isStream() && o.isIndirect() && o.readRawStream().asUint8Array().length >= MIN && hit(parent, key, o)) return;
+      const d = o.resolve();
+      if (d.isDictionary() || d.isArray()) d.forEach((v, k) => { if (k !== 'Parent') go(d, k, v); });
+    };
+    const res = page.getInheritable('Resources');
+    if (res.isDictionary()) go(page, 'Resources', res);
+  };
+  const known = new Map<string, MuPDF.PDFObject>(), pages = [...from.keys()].map((i) => out.findPage(i));
+  from.forEach((d, i) => { if (d === first) walk(pages[i], (_p, _k, o) => (known.has(sig(o)) ? false : (known.set(sig(o), o), false))); });
+  from.forEach((d, i) => {
+    if (d < 0 || d === first) return;
+    walk(pages[i], (parent, key, o) => { const same = known.get(sig(o)); if (!same || same.asIndirect() === o.asIndirect()) return false; parent.put(key, same); return true; });
+  });
 }
