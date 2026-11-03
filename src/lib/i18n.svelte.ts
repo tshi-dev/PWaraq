@@ -251,6 +251,11 @@ const strings = {
   dragSection: ['Drag to move the section', 'اسحب لنقل القسم'],
   // phase 3: redact, forms, OCR
   moveArea: ['Move area', 'نقل منطقة'], placeMove: ['Drag over the part of the page to move. Then drag it to its new place: text and drawings stay real, a picture is cut at the edge.', 'اسحب فوق الجزء الذي تريد نقله ثم اسحبه إلى مكانه الجديد: يبقى النص والرسم حقيقيين وتُقصّ الصورة عند الحافة.'], moveAreaHelp: ['Drag the area to move it. Saving the page moves what is inside it for good; Delete puts it back.', 'اسحب المنطقة لنقلها. حفظ الصفحة ينقل ما بداخلها نهائيًا؛ الحذف يعيدها.'],
+  // layers (page editor)
+  layers: ['Layers', 'الطبقات'], layerList: ['Layer list', 'قائمة الطبقات'], layerOrder: ['Order', 'الترتيب'], toFront: ['Bring to front', 'إحضار إلى الأمام'], layerForward: ['Forward', 'تقديم خطوة'], layerBackward: ['Backward', 'تأخير خطوة'], toBack: ['Send to back', 'إرسال إلى الخلف'],
+  layersEmpty: ['Nothing to arrange yet. Pictures, moved areas, white covers, photos and text you add appear here.', 'لا شيء لترتيبه بعد. تظهر هنا الصور والمناطق المنقولة والأغطية البيضاء والصور والنصوص التي تضيفها.'],
+  layerHide: ['Hide while you edit. A hidden layer is still saved.', 'إخفاء أثناء التحرير. تبقى الطبقة المخفية محفوظة.'], layerShow: ['Show this layer again. Hidden or shown, it is saved.', 'إظهار الطبقة من جديد. تُحفظ ظاهرةً كانت أو مخفية.'],
+  layerPicture: ['Picture {n}', 'صورة {n}'], layerArea: ['Moved area {n}', 'منطقة منقولة {n}'], layerCover: ['White cover {n}', 'غطاء أبيض {n}'], layerPhoto: ['Photo {n}', 'صورة مضافة {n}'], layerText: ['Text: {text}', 'نص: {text}'], layerTextBox: ['Text box', 'مربع نص'],
   redactArea: ['Redact', 'تعتيم'], coverFill: ['Fill', 'التعبئة'], coverBlack: ['Black', 'أسود'], coverWhite: ['White', 'أبيض'],
   coverWhiteHelp: ['What is under the box is removed for good and the box is white: write new text over it (for drawings and scans).', 'يُزال ما تحت المربع نهائيًا ويصبح المربع أبيض: اكتب نصًا جديدًا فوقه (للمخططات والمستندات الممسوحة).'], placeRedact: ['Drag over what should be removed for good. Saving the page removes it from the file.', 'اسحب فوق ما يجب إزالته نهائيًا. حفظ الصفحة يزيله من الملف.'],
   redact: ['Redact', 'تعتيم'], forms: ['Forms', 'نماذج'],

@@ -240,3 +240,10 @@ test('the picture of one photo alone (the editor shows it while it is moved)', (
   assert.ok(near(o.images[0], { x: 350, y: 242, w: 100, h: 100 }));
   assert.equal(p.toStructuredText().asText().trim(), '', 'no text');
 });
+
+test('layers: two overlapping moved areas are drawn in the order z gives, whatever order they were made in', () => {
+  const a = { kind: 'move', from: { x: 90, y: 170, w: 120, h: 90 }, x: 300, y: 400, w: 120, h: 90 }, b = { kind: 'move', from: { x: 80, y: 260, w: 100, h: 60 }, x: 320, y: 420, w: 100, h: 60 }; // a holds the blue shape, b a piece of the red picture
+  const at = (edits) => rgbAt(apply(edits, slide()), 350, 440); // inside both: a's blue shape and b's red
+  assert.ok(isRed(at([a, b])) && isRed(at([{ ...a, z: 0 }, { ...b, z: 1 }])), 'b on top');
+  assert.ok(isBlue(at([{ ...a, z: 1 }, { ...b, z: 0 }])) && isBlue(at([{ ...b, z: 0 }, { ...a, z: 1 }])), 'swapped: a on top, also when it is listed last');
+});

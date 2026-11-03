@@ -21,7 +21,10 @@
   let { pool, base, label, onSave, onCancel }: { pool: EnginePool; base: Item; label: string; onSave: (r: Saved) => void | Promise<void>; onCancel: () => void } = $props();
 
   // what the editor holds: the engine's edits plus an id; `orig` = the state it was lifted with (unchanged ones are dropped)
-  type Obj = Edit & { id: string; orig?: string; line?: number; removed?: boolean; aligned?: boolean };
+  // `no`: the number in the layer's name (Moved area 2); `hidden` (below) is view only and not part of the edits
+  type Obj = Edit & { id: string; orig?: string; line?: number; removed?: boolean; aligned?: boolean; no?: number };
+  const made = { move: 0, redact: 0, photo: 0 };
+  let hidden = $state<Record<string, boolean>>({}), layersOpen = $state(false);
   let doc = $state(-1), size = $state({ w: 595, h: 842 }), found = $state<{ lines: PageLine[]; images: Box[] }>({ lines: [], images: [] });
   let objs = $state<Obj[]>([]), selected = $state<string | null>(null), tool = $state<'select' | 'text' | 'redact' | 'move'>('select'), busy = $state(t('openingPage'));
   const sel = $derived(objs.find((o) => o.id === selected));
@@ -94,7 +97,7 @@
   let canvas = $state<HTMLCanvasElement>(), clean = $state(''); // clean: the untouched page, for pictures of photos being moved
   const lifted = $derived(JSON.stringify(objs.flatMap((o): Edit[] => o.kind === 'image' ? [{ kind: 'image', index: o.index, from: o.from, ...o.from }]
     : o.kind === 'text' && o.from ? [{ kind: 'text', from: o.from, text: '', size: 1, color: [0, 0, 0], bold: false, align: 'left', ...o.from }]
-    : o.kind === 'redact' && o.w > 2 && o.h > 2 ? [{ kind: 'redact', white: o.white, x: o.x, y: o.y, w: o.w, h: o.h }]
+    : o.kind === 'redact' && o.w > 2 && o.h > 2 && !hidden[o.id] ? [{ kind: 'redact', white: o.white, x: o.x, y: o.y, w: o.w, h: o.h }]
     : o.kind === 'move' && o.from.w > 2 && o.from.h > 2 ? [{ kind: 'move', from: o.from, ...o.from }] : [])));
   $effect(() => {
     if (doc < 0 || !s || !canvas) return;
@@ -165,7 +168,7 @@
   function markArea(e: PointerEvent) {
     e.preventDefault();
     const el = e.currentTarget as HTMLElement, r = el.getBoundingClientRect(), x0 = (e.clientX - r.left) / s, y0 = (e.clientY - r.top) / s, before = snap();
-    const o: Obj = tool === 'move' ? { id: uid(), kind: 'move', from: { x: x0, y: y0, w: 0, h: 0 }, x: x0, y: y0, w: 0, h: 0 } : { id: uid(), kind: 'redact', white: coverWhite, x: x0, y: y0, w: 0, h: 0 };
+    const o: Obj = tool === 'move' ? { id: uid(), kind: 'move', no: ++made.move, from: { x: x0, y: y0, w: 0, h: 0 }, x: x0, y: y0, w: 0, h: 0 } : { id: uid(), kind: 'redact', no: ++made.redact, white: coverWhite, x: x0, y: y0, w: 0, h: 0 };
     objs.push(o); select(o.id);
     const box = objs[objs.length - 1];
     el.setPointerCapture(e.pointerId);
@@ -257,6 +260,36 @@
     selected = null;
   }
 
+  // layers: the objects that are drawn on the page, in the order of `objs` (the last one is in front; saved as `z`). Front first in the list,
+  // then the page's own pictures that were not touched yet (clicking one lifts it, like clicking it on the page)
+  const listable = (o: Obj) => !o.removed && (o.kind === 'image' || o.kind === 'move' || o.kind === 'photo' || (o.kind === 'redact' && !!o.white) || (o.kind === 'text' && !o.from));
+  const THUMB = 32; // --thumb
+  const thumb = (url: string, b: Box) => { const k = THUMB / Math.max(b.w, b.h, 1); return `background-image:url(${url});background-size:${size.w * k}px ${size.h * k}px;background-position:${(THUMB - b.w * k) / 2 - b.x * k}px ${(THUMB - b.h * k) / 2 - b.y * k}px`; };
+  type Row = { key: string; name: string; o?: Obj; image?: number; style?: string; img?: string; icon?: string; white?: boolean };
+  const rows = $derived<Row[]>([
+    ...objs.filter(listable).reverse().map((o): Row => {
+      const n = (k: Key, v: string | number) => t(k).replace('{n}', String(v));
+      if (o.kind === 'image') return { key: o.id, o, name: n('layerPicture', o.index + 1), ...(o.photo != null ? { img: urls[o.photo] } : pics[o.index] ? { style: thumb(pics[o.index], o.from) } : { icon: 'images' }) };
+      if (o.kind === 'move') return { key: o.id, o, name: n('layerArea', o.no ?? 1), ...(clean ? { style: thumb(clean, o.from) } : { icon: 'select' }) };
+      if (o.kind === 'photo') return { key: o.id, o, name: n('layerPhoto', o.no ?? 1), img: urls[o.photo] };
+      if (o.kind === 'redact') return { key: o.id, o, name: n('layerCover', o.no ?? 1), white: true };
+      const first = o.kind === 'text' ? o.text.trim().split(/\s+/).slice(0, 4).join(' ') : '';
+      return { key: o.id, o, name: first ? t('layerText').replace('{text}', first) : t('layerTextBox'), icon: 'text' };
+    }),
+    ...found.images.map((_, i) => i).filter((i) => !liftedImage(i)).map((i): Row => ({ key: 'p' + i, image: i, name: t('layerPicture').replace('{n}', String(i + 1)), ...(pics[i] ? { style: thumb(pics[i], found.images[i]) } : { icon: 'images' }) })),
+  ]);
+  $effect(() => { if (doc >= 0 && s) found.images.slice(0, 24).forEach((_, i) => pictureOf(i)); }); // the pictures of the list
+  const listed = $derived(objs.filter(listable)), at = $derived(listed.findIndex((o) => o.id === selected));
+  const ORDER = [['front', 'to-front', 'toFront'], ['forward', 'forward', 'layerForward'], ['backward', 'backward', 'layerBackward'], ['back', 'to-back', 'toBack']] as const;
+  function stack(to: 'front' | 'forward' | 'backward' | 'back') {
+    const o = sel;
+    if (!o || at < 0) return;
+    const rest = objs.filter((x) => x !== o), next = to === 'forward' ? listed[at + 1] : to === 'backward' ? listed[at - 1] : null;
+    const i = to === 'front' ? rest.length : to === 'back' ? 0 : rest.indexOf(next!) + (to === 'forward' ? 1 : 0);
+    change(() => { o.orig = undefined; objs = [...rest.slice(0, i), o, ...rest.slice(i)]; }); // no longer "left as it was": the new order is kept
+  }
+  function pick(r: Row) { tool = 'select'; if (r.o) select(r.o.id); else liftImage(r.image!); }
+
   // photos: a new one in the middle of the page, or a replacement in the selected photo's place
   let picker: HTMLInputElement, replacing = false;
   async function choosePhoto(replace: boolean) {
@@ -273,7 +306,7 @@
     if (target && (target.kind === 'image' || target.kind === 'photo')) change(() => { target.photo = n; });
     else {
       const w = Math.min(size.w * 0.4, bmp.width * 0.75), h = (w * bmp.height) / bmp.width;
-      const o: Obj = { id: uid(), kind: 'photo', photo: n, x: (size.w - w) / 2, y: Math.max(8, (size.h - h) / 2), w, h };
+      const o: Obj = { id: uid(), kind: 'photo', no: ++made.photo, photo: n, x: (size.w - w) / 2, y: Math.max(8, (size.h - h) / 2), w, h };
       change(() => objs.push(o)); select(o.id);
     }
     bmp.close();
@@ -288,7 +321,7 @@
 
   async function save() {
     select(null);
-    const edits = (snap()).map(({ id, orig, line, ...e }) => e as Edit);
+    const edits = (snap()).map(({ id, orig, line, no, ...e }, z) => ({ ...e, z }) as Edit); // z: the order on the page, as the layers panel and the stage show it
     if (!edits.length) { onCancel(); return; }
     busy = t('savingPage');
     try {
@@ -328,6 +361,7 @@
     <span class="where num">{label}</span>
     <button class="btn" onclick={onCancel} disabled={!!busy && doc >= 0}>{@html icon('close')}{t('cancel')}</button>
     <button class="btn primary" onclick={save} disabled={!!busy}>{@html icon('check')}{t('savePage')}</button>
+    <button class="btn layers-btn" aria-expanded={layersOpen} aria-controls="layers" onclick={() => (layersOpen = !layersOpen)}>{@html icon('layers')}{t('layers')}</button>
   </div>
 
   <div class="body">
@@ -348,7 +382,7 @@
           {#each objs as o (o.id)}
             {#if !o.removed}
               {#if o.kind === 'text'}
-                <div class="obj text" class:on={o.id === selected} data-obj={o.id} style="left:{o.x * s}px;top:{o.y * s}px;width:{o.w * s}px">
+                <div class="obj text" class:on={o.id === selected} class:hid={hidden[o.id]} data-obj={o.id} style="left:{o.x * s}px;top:{o.y * s}px;width:{o.w * s}px">
                   {#if o.id === selected}<div class="grip" title={t('moveHandle')} onpointerdown={(e) => drag(e, o, 'move')}></div>{/if}
                   <textarea bind:value={o.text} dir="auto" rows="1" spellcheck="false" placeholder={t('typeHere')} aria-label={t('textOptions')}
                     style="font-family:{family(o)};font-size:{o.size * s}px;font-weight:{o.bold ? 700 : 400};color:{rgb(o.color)};text-align:{o.align};line-height:{LEADING};transform:translateY({shift[o.bold ? 1 : 0] * o.size * s}px)"
@@ -357,7 +391,7 @@
                 </div>
               {:else}
                 <!-- svelte-ignore a11y_no_static_element_interactions (moved with the pointer; Delete and the options panel work from the keyboard) -->
-                <div class="obj pic" class:redact={o.kind === 'redact'} class:area={o.kind === 'move'} class:on={o.id === selected} data-obj={o.id} style="left:{o.x * s}px;top:{o.y * s}px;width:{o.w * s}px;height:{o.h * s}px;{picture(o)}"
+                <div class="obj pic" class:redact={o.kind === 'redact'} class:area={o.kind === 'move'} class:white={o.kind === 'redact' && o.white} class:hid={hidden[o.id]} class:on={o.id === selected} data-obj={o.id} style="left:{o.x * s}px;top:{o.y * s}px;width:{o.w * s}px;height:{o.h * s}px;{picture(o)}"
                   onpointerdown={(e) => drag(e, o, 'move')}>
                   {#if (o.kind === 'image' || o.kind === 'photo') && o.photo != null}<img src={urls[o.photo]} alt="" draggable="false" />{/if}
                   {#if o.id === selected && o.kind !== 'move'}<div class="corner" title={t('resizeHandle')} onpointerdown={(e) => drag(e, o, 'size')}></div>{/if}
@@ -370,6 +404,7 @@
     </div>
 
     <aside class="side" aria-label={t('options')}>
+      <div class="opts">
       {#if sel?.kind === 'text'}
         {@const o = sel}
         <h2>{t('textOptions')}</h2>
@@ -429,6 +464,38 @@
         <p class="help">{tool === 'text' ? t('placeText') : tool === 'redact' ? t('placeRedact') : tool === 'move' ? t('placeMove') : t('editorHelp')}</p>
         <p class="note">{@html icon('info')}<span>{t('fontNote')}</span></p>
       {/if}
+      </div>
+
+      <section class="layers" id="layers" class:open={layersOpen} aria-label={t('layers')}>
+        <div class="lhead">
+          <h2>{t('layers')}</h2>
+          <button class="btn icon close" onclick={() => (layersOpen = false)} title={t('close')} aria-label={t('close')}>{@html icon('close')}</button>
+        </div>
+        <div class="order" role="group" aria-label={t('layerOrder')}>
+          {#each ORDER as [to, ic, label]}
+            <button class="btn icon" onclick={() => stack(to)} disabled={to === 'front' || to === 'forward' ? !(at >= 0 && at < listed.length - 1) : !(at > 0)} title={t(label)} aria-label={t(label)}>{@html icon(ic)}</button>
+          {/each}
+        </div>
+        {#if rows.length}
+          <ul class="list" aria-label={t('layerList')}>
+            {#each rows as r (r.key)}
+              {@const off = !!r.o && !!hidden[r.o.id]}
+              <li class:on={!!r.o && r.o.id === selected} class:off>
+                <button class="pick" aria-pressed={!!r.o && r.o.id === selected} title={r.name} onclick={() => pick(r)}>
+                  <span class="thumb" class:white={r.white} style={r.style}>{#if r.img}<img src={r.img} alt="" draggable="false" />{:else if r.icon}{@html icon(r.icon)}{/if}</span>
+                  <bdi class="name">{r.name}</bdi>
+                </button>
+                {#if r.o}
+                  {@const id = r.o.id}
+                  <button class="btn icon eye" onclick={() => (hidden[id] = !hidden[id])} title={t(off ? 'layerShow' : 'layerHide')} aria-label={t(off ? 'layerShow' : 'layerHide')}>{@html icon(off ? 'eye-off' : 'eye')}</button>
+                {/if}
+              </li>
+            {/each}
+          </ul>
+        {:else}
+          <p class="help">{t('layersEmpty')}</p>
+        {/if}
+      </section>
     </aside>
   </div>
 </div>
@@ -462,6 +529,26 @@
   .corner { position: absolute; right: -8px; bottom: -8px; width: 14px; height: 14px; border: 2px solid var(--surface); border-radius: 50%; background: var(--green); cursor: nwse-resize; }
   .side { display: flex; flex-direction: column; gap: var(--s-16); padding: var(--s-16); background: var(--surface); border-inline-start: 1px solid var(--line); overflow-y: auto; }
   .side h2 { margin: 0; font-size: var(--fs-18); }
+  .opts { display: flex; flex-direction: column; gap: var(--s-16); flex: none; }
+  .obj.hid { display: none; }
+  .obj.white { background: var(--page); }
+  /* layers: a list under the options; on a narrow screen a sheet over the page, opened by the toolbar's Layers button */
+  .layers { display: flex; flex-direction: column; gap: var(--s-8); padding-top: var(--s-16); border-top: 1px solid var(--line); }
+  .lhead { display: flex; align-items: center; justify-content: space-between; }
+  .close, .layers-btn { display: none; }
+  .order { display: flex; gap: var(--s-8); }
+  .list { display: flex; flex-direction: column; gap: var(--s-4); margin: 0; padding: 0; list-style: none; }
+  .list li { display: flex; align-items: center; gap: var(--s-4); border-radius: var(--r-8); transition: background-color .15s ease-out; }
+  .list li:hover { background: var(--green-soft); }
+  .list li.on { background: var(--green-soft); outline: 1px solid var(--green); outline-offset: -1px; }
+  .pick { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--s-8); min-height: var(--control); padding: var(--s-4) var(--s-8); border: 0; border-radius: var(--r-8); background: transparent; color: var(--ink); text-align: start; }
+  .list li.on .pick { color: var(--green-deep); font-weight: 600; }
+  .list li.off .pick { color: var(--muted); }
+  .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .thumb { flex: none; width: var(--thumb); height: var(--thumb); display: grid; place-items: center; border: 1px solid var(--line); border-radius: var(--r-8); background-color: var(--canvas); background-repeat: no-repeat; color: var(--muted); overflow: hidden; }
+  .thumb.white { background-color: var(--page); }
+  .thumb img { width: 100%; height: 100%; object-fit: contain; }
+  .eye { flex: none; }
   .field { display: grid; gap: var(--s-8); font-weight: 600; }
   .field select { min-height: var(--control); padding: 0 var(--s-12); border: 1px solid var(--line); border-radius: var(--r-8); background: var(--paper); font-weight: 400; }
   .row { display: flex; flex-wrap: wrap; gap: var(--s-8); }
@@ -471,5 +558,10 @@
   .note { display: flex; gap: var(--s-8); margin: 0; padding: var(--s-12); border-radius: var(--r-8); background: var(--green-soft); color: var(--ink); }
   .note :global(svg) { flex: none; color: var(--green); }
   .note.warn { background: var(--paper); border: 1px solid var(--green); }
-  @media (max-width: 900px) { .body { grid-template-columns: 1fr; grid-template-rows: 1fr auto; } .side { max-height: 40vh; border-inline-start: 0; border-top: 1px solid var(--line); } }
+  @media (max-width: 900px) {
+    .body { grid-template-columns: 1fr; grid-template-rows: 1fr auto; } .side { max-height: 40vh; border-inline-start: 0; border-top: 1px solid var(--line); }
+    .layers-btn, .close { display: inline-flex; }
+    .layers { display: none; position: fixed; z-index: 30; inset-inline: 0; bottom: 0; max-height: 60dvh; overflow-y: auto; padding: var(--s-16) var(--s-16) calc(var(--s-16) + env(safe-area-inset-bottom, 0px)); background: var(--surface); border-top: 1px solid var(--line); border-radius: var(--r-12) var(--r-12) 0 0; box-shadow: var(--shadow); }
+    .layers.open { display: flex; }
+  }
 </style>
