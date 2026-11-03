@@ -90,7 +90,7 @@ for (const [label, key] of todo) for (const lang of ['en', 'ar']) {
 
   await P.goto(APP); await P.locator('.start').waitFor({ timeout: 60_000 });
   await step('start screen', async () => `${vp.width}x${vp.height}`);
-  await step('New portfolio (tap)', async () => { await tap(P.getByRole('button', { name: t('newPortfolio') })); await P.locator('.empty, .sec').first().waitFor({ timeout: 30_000 }); });
+  await step('New portfolio (tap)', async () => { await tap(P.getByRole('button', { name: t('portfolio') })); await P.locator('.empty, .sec').first().waitFor({ timeout: 30_000 }); });
   await step('add two PDFs as sections', async () => { await chooser(() => tap(P.getByRole('button', { name: new RegExp('^(' + t('addSection') + '|' + t('addFileShort') + ')$') }).first()), [fx('three.pdf'), fx('small.pdf')]); await P.waitForFunction(() => document.querySelectorAll('.sec').length === 2, null, { timeout: 30_000 }); });
   await step('rename the first section (tap, type)', async () => { await typeInto(P.locator('.sec .title').first(), lang === 'ar' ? 'الأسبوع الأول' : 'Week one'); must((await P.locator('.sec .title').first().inputValue()).length > 3, 'title not typed'); });
   await step('reorder: Move section down / up buttons', async () => { const first = async () => (await P.locator('.sec .title').first().inputValue()); const a = await first(); await tap(P.getByRole('button', { name: t('moveDown') }).first()); await P.waitForTimeout(400); const b = await first(); must(a !== b, 'order did not change after Move down'); await tap(P.getByRole('button', { name: t('moveUp') }).nth(1)); await P.waitForTimeout(400); must((await first()) === a, 'Move up did not restore'); });

@@ -39,7 +39,7 @@
   let want: Key | undefined, extra: File[] = [];
   const modes: { task: Key | 'portfolio'; name: Key; line: Key; icon: string }[] = [
     { task: 'sign', name: 'sign', line: 'modeSignLine', icon: 'signature' },
-    { task: 'portfolio', name: 'portfolio', line: 'portfolioHint', icon: 'library' },
+    { task: 'portfolio', name: 'portfolio', line: 'portfolioTile', icon: 'library' },
     { task: 'ocr', name: 'modeOcr', line: 'modeOcrLine', icon: 'ocr' },
     { task: 'organize', name: 'modeCombine', line: 'modeCombineLine', icon: 'merge' },
     { task: 'forms', name: 'modeForms', line: 'modeFormsLine', icon: 'forms' },
@@ -262,7 +262,6 @@
       <p class="muted">{t('dropHere')}</p>
       <div class="actions">
         <button class="btn primary big" onclick={plain} disabled={busy}>{@html icon('upload')}{busy ? t('reading') : t('open')}</button>
-        <button class="btn big" onclick={startPortfolio} disabled={busy}>{@html icon('library')}{t('newPortfolio')}</button>
       </div>
       {#if locked}
         <form class="lock" onsubmit={unlockOpen}>

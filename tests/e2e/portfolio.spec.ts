@@ -6,7 +6,7 @@ import { saved, choose, fixture } from './helpers';
 test('portfolio: sections from files, contents with titles, divider page, photo, export, save and reopen', async ({ page }, info) => {
   test.setTimeout(90_000);
   await page.goto('/');
-  await page.getByRole('button', { name: 'New portfolio' }).click();
+  await page.getByRole('button', { name: 'Portfolio' }).click();
   await choose(page, () => page.getByRole('button', { name: 'Add a file as a section' }).first().click(), [fixture('three.pdf'), fixture('small.pdf')]);
   await expect(page.locator('.sec')).toHaveCount(2);
   await expect(page.locator('.sec .title').first()).toHaveValue('three');

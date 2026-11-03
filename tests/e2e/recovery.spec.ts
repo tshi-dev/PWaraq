@@ -173,7 +173,7 @@ test('desktop save: the new file is read back and checked before it replaces any
 test('portfolio: earlier versions are kept and "Restore previous version" brings one back (Undo undoes it)', async ({ page }) => {
   test.setTimeout(120_000);
   await page.goto('/');
-  await page.getByRole('button', { name: 'New portfolio' }).click();
+  await page.getByRole('button', { name: 'Portfolio' }).click();
   await expect.poll(() => page.evaluate(async () => { try { const d = await (await (await navigator.storage.getDirectory()).getDirectoryHandle('vault')).getDirectoryHandle('portfolio-versions'); for await (const _ of (d as any).entries()) return 1; } catch {} return 0; })).toBe(1);
   await page.getByRole('button', { name: 'Restore previous version' }).click();
   await expect(page.getByRole('menuitem')).toHaveCount(1, { timeout: 10_000 }); // the state it was opened in: empty

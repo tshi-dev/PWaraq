@@ -73,7 +73,7 @@ for (const [lang, theme] of COMBOS) test(`design rules hold on every screen (${l
   await page.locator('.task').nth(0).click(); // back to View
 
   await page.locator('.end .btn').filter({ has: page.locator('svg') }).nth(2).click(); // Close
-  await page.locator('.actions .btn').nth(1).click(); // New portfolio
+  await page.getByRole('button', { name: lang === 'ar' ? 'حافظة' : 'Portfolio' }).click();
   await clean(page, 'empty portfolio');
   await choose(page, () => page.locator('.empty').click(), [fixture('three.pdf'), fixture('small.pdf')]);
   await expect(page.locator('.sec')).toHaveCount(2);

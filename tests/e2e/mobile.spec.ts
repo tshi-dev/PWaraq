@@ -9,8 +9,8 @@ const audit = fs.readFileSync(path.join(import.meta.dirname, '..', '..', 'tools'
 const strip = (d: object) => { const { defaultBrowserType, ...rest } = d as Record<string, unknown>; return rest; };
 const DEVICES = [['iPhone 14', strip(devices['iPhone 14'])], ['iPhone SE', strip(devices['iPhone SE'])], ['iPad portrait', strip(devices['iPad (gen 7)'])]] as const;
 const T = {
-  en: { portfolio: 'New portfolio', add: 'Add file', hide: 'Hide options', show: 'Show options', name: 'Portfolio name' },
-  ar: { portfolio: 'حافظة جديدة', add: 'إضافة ملف', hide: 'إخفاء الخيارات', show: 'إظهار الخيارات', name: 'اسم الحافظة' },
+  en: { portfolio: 'Portfolio', add: 'Add file', hide: 'Hide options', show: 'Show options', name: 'Portfolio name' },
+  ar: { portfolio: 'حافظة', add: 'إضافة ملف', hide: 'إخفاء الخيارات', show: 'إظهار الخيارات', name: 'اسم الحافظة' },
 };
 
 async function pinch(page: Page, x: number, y: number, from: number, to: number) {
