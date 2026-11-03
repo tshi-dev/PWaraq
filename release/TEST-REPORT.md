@@ -418,3 +418,75 @@ Silent install into `C:\Users\Abdullah\AppData\Local\WaraqInstallTest` (per-user
 | .waraq association removed | pass |  |
 | right-click entries removed | pass |  |
 | rollback copies removed | pass |  |
+
+## Installer test — 2026-11-03 17:44 — Waraq_1.0.0-beta.4_x64-setup.exe
+
+Silent install into `C:\Users\Abdullah\AppData\Local\WaraqInstallTest` (per-user), launch by file, silent uninstall. 29 checks, 1 failed.
+
+| Check | Result | Note |
+|---|---|---|
+| silent install exits 0 | pass | exit 0 |
+| waraq.exe installed | pass |  |
+| uninstall.exe installed | pass |  |
+| Start menu shortcut | pass |  |
+| desktop shortcut (silent installs create it) | pass |  |
+| uninstall entry (per-user) | pass | version 1.0.0-beta.4 |
+| uninstall entry points at the test dir | pass |  |
+| .pdf default handler untouched | pass | before='' after='' |
+| .pdf offered: OpenWithProgids\Waraq.PDF | pass |  |
+| Waraq.PDF open command | pass |  |
+| .waraq associated (Waraq.Portfolio) | pass |  |
+| Waraq.Portfolio open command | pass |  |
+| right-click 'Open in Waraq' on .pdf | pass |  |
+| right-click 'Open in Waraq' on .waraq | pass |  |
+| installer copy kept for rollback | pass |  |
+| PDF opens Waraq via the right-click verb | pass | 1 process(es) |
+| window shows the document (screenshot) | **FAIL** | FAIL top=#1e2b26 page: white 100% dark 0 px, window 2560x1392 edge: (24,0)=#ffffff (200,0)=#ffffff (1280,0)=#ffffff (24,2)=#ffffff (200,2)=#ffffff (1280,2)=#ffffff |
+| second file goes to the running window (single instance) | pass | 1 process(es) |
+| silent uninstall exits 0 | pass | exit 0 |
+| install folder removed | pass |  |
+| Start menu shortcut removed | pass |  |
+| desktop shortcut removed | pass |  |
+| uninstall entry removed | pass |  |
+| Waraq.PDF removed | pass |  |
+| OpenWithProgids\Waraq.PDF removed | pass |  |
+| .pdf default handler still untouched | pass |  |
+| .waraq association removed | pass |  |
+| right-click entries removed | pass |  |
+| rollback copies removed | pass |  |
+
+## Installer test — 2026-11-03 17:45 — Waraq_1.0.0-beta.4_x64-setup.exe
+
+Silent install into `C:\Users\Abdullah\AppData\Local\WaraqInstallTest` (per-user), launch by file, silent uninstall. 29 checks, 1 failed.
+
+| Check | Result | Note |
+|---|---|---|
+| silent install exits 0 | pass | exit 0 |
+| waraq.exe installed | pass |  |
+| uninstall.exe installed | pass |  |
+| Start menu shortcut | pass |  |
+| desktop shortcut (silent installs create it) | pass |  |
+| uninstall entry (per-user) | pass | version 1.0.0-beta.4 |
+| uninstall entry points at the test dir | pass |  |
+| .pdf default handler untouched | pass | before='' after='' |
+| .pdf offered: OpenWithProgids\Waraq.PDF | pass |  |
+| Waraq.PDF open command | pass |  |
+| .waraq associated (Waraq.Portfolio) | pass |  |
+| Waraq.Portfolio open command | pass |  |
+| right-click 'Open in Waraq' on .pdf | pass |  |
+| right-click 'Open in Waraq' on .waraq | pass |  |
+| installer copy kept for rollback | pass |  |
+| PDF opens Waraq via the right-click verb | pass | 1 process(es) |
+| window shows the document (screenshot) | **FAIL** | FAIL top=#1e2b26 page: white 100% dark 0 px, window 2560x1392 edge: (24,0)=#ffffff (200,0)=#ffffff (1280,0)=#ffffff (24,2)=#ffffff (200,2)=#ffffff (1280,2)=#ffffff |
+| second file goes to the running window (single instance) | pass | 1 process(es) |
+| silent uninstall exits 0 | pass | exit 0 |
+| install folder removed | pass |  |
+| Start menu shortcut removed | pass |  |
+| desktop shortcut removed | pass |  |
+| uninstall entry removed | pass |  |
+| Waraq.PDF removed | pass |  |
+| OpenWithProgids\Waraq.PDF removed | pass |  |
+| .pdf default handler still untouched | pass |  |
+| .waraq association removed | pass |  |
+| right-click entries removed | pass |  |
+| rollback copies removed | pass |  |
