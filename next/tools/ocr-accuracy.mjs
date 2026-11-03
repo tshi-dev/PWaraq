@@ -83,7 +83,7 @@ function placement(pdf, lines, pic) {
 
 // --- engines: lines of words in reading order ---
 async function tesseract() {
-  const T = createRequire(import.meta.url)('tesseract.js'), langs = (opt.passes.length ? opt.passes : ['ara+eng']).map((l) => l.replace(/ara/, opt.ara));
+  const T = createRequire(import.meta.url)('tesseract.js'), langs = (opt.passes.length ? opt.passes : ['ara+eng']).map((l) => l.replace(/\bara\b/, opt.ara));
   const workers = [];
   for (const lang of langs) {
     const w = await T.createWorker(lang, 1, { langPath: path.join(root, 'public', 'ocr'), gzip: true, cacheMethod: 'none' });

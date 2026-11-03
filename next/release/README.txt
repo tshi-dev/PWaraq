@@ -1,8 +1,8 @@
-Waraq 1.0.0-beta.3 — Windows installer (NSIS, per-user, no administrator rights)
-File:    Waraq_1.0.0-beta.3_x64-setup.exe
-Size:    30158815 bytes (28.8 MB)
-SHA-256: c9402b553e3c9ba5b94460242cc8f667bef37ebc2d6db82a62ea1ec331f45967
-Built:   2026-10-27T10:37:44.405Z
+Waraq 1.0.0-beta.4 — Windows installer (NSIS, per-user, no administrator rights)
+File:    Waraq_1.0.0-beta.4_x64-setup.exe
+Size:    30165012 bytes (28.8 MB)
+SHA-256: 200a5282a4b77f0c41e6d0347f6bc9b1ca360a6f2bd340e5a713a701c3b4477e
+Built:   2026-11-03T14:41:36.349Z
 
 Silent install:   Waraq_x_y_z_x64-setup.exe /S            (optional: /D=C:\path, last argument, no quotes)
 Silent uninstall: "%LOCALAPPDATA%\Waraq\uninstall.exe" /S

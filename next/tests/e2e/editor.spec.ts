@@ -20,7 +20,7 @@ const near = (a: { x: number; y: number; w: number; h: number }, b: typeof a, to
 test('portfolio: add Arabic text to a page, the page keeps its place, export has the real text', async ({ page }, info) => {
   test.setTimeout(90_000);
   await page.goto('/');
-  await page.getByRole('button', { name: 'New portfolio' }).click();
+  await page.getByRole('button', { name: 'Portfolio' }).click();
   await choose(page, () => page.getByRole('button', { name: 'Add a file as a section' }).first().click(), [fixture('three.pdf')]);
   await expect(page.locator('.cell')).toHaveCount(3);
   await page.locator('.cell').nth(1).dblclick();
@@ -201,7 +201,7 @@ test('edit: cover + type — a white box opens a text box inside it; the old tex
 test('page editor: zoom to 200 % and back to fit; the page stays whole and scrollable, text can still be placed', async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto('/');
-  await page.getByRole('button', { name: 'New portfolio' }).click();
+  await page.getByRole('button', { name: 'Portfolio' }).click();
   await choose(page, () => page.getByRole('button', { name: 'Add a file as a section' }).first().click(), [fixture('three.pdf')]);
   await page.locator('.cell').nth(1).dblclick();
   await ready(page);

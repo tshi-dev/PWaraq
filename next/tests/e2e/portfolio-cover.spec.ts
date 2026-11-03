@@ -7,7 +7,7 @@ const titles = (page: import('@playwright/test').Page) => page.locator('.sec .ti
 test('portfolio: cover with a logo, a design, a turned divider, a lined page, closed and locked sections, numbers on the right', async ({ page }, info) => {
   test.setTimeout(90_000);
   await page.goto('/');
-  await page.getByRole('button', { name: 'New portfolio' }).click();
+  await page.getByRole('button', { name: 'Portfolio' }).click();
   await choose(page, () => page.getByRole('button', { name: 'Add a file as a section' }).first().click(), [fixture('three.pdf'), fixture('small.pdf')]);
   await expect(page.locator('.sec')).toHaveCount(2);
 
@@ -63,7 +63,7 @@ test('portfolio: cover with a logo, a design, a turned divider, a lined page, cl
 
 test('portfolio: drag a whole section above another; a photo over the whole cover', async ({ page }, info) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'New portfolio' }).click();
+  await page.getByRole('button', { name: 'Portfolio' }).click();
   await choose(page, () => page.getByRole('button', { name: 'Add a file as a section' }).first().click(), [fixture('three.pdf'), fixture('small.pdf')]);
   await expect.poll(() => titles(page)).toEqual(['three', 'small']);
   await page.locator('.sec .grip').nth(1).dragTo(page.locator('.sec').first(), { targetPosition: { x: 300, y: 4 } });

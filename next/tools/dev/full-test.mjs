@@ -143,7 +143,7 @@ groups.start = async () => {
     await goStart(s);
     await check('start', 'language switch button flips the whole interface and it is remembered after reload', lang, P, async () => { await P.locator('.start .lang button[aria-label]').last().click(); await P.waitForTimeout(300); must((await P.locator('html').getAttribute('dir')) === (lang === 'ar' ? 'ltr' : 'rtl'), 'did not flip'); await P.reload(); must((await P.locator('html').getAttribute('dir')) === (lang === 'ar' ? 'ltr' : 'rtl'), 'not remembered'); await P.locator('.start .lang button[aria-label]').last().click(); await P.waitForTimeout(200); }, { shot: true });
     await check('start', 'theme button cycles four themes (Light, Dim, Dark, Graphite)', lang, P, async () => { const seen = []; for (let i = 0; i < 5; i++) { seen.push(await P.locator('html').getAttribute('data-theme')); await P.locator('.start .lang button').first().click(); await P.waitForTimeout(150); if (i === 1) await shot(P, 'start', 'theme-dim', lang); } must(new Set(seen).size >= 4, 'themes seen: ' + seen.join(',')); return seen.slice(0, 4).join(' > '); });
-    await check('start', 'New portfolio opens a portfolio', lang, P, async () => { await P.getByRole('button', { name: t('newPortfolio') }).click(); await P.locator('.empty, .sec').first().waitFor({ timeout: 30_000 }); }, { shot: true });
+    await check('start', 'New portfolio opens a portfolio', lang, P, async () => { await P.getByRole('button', { name: t('portfolio') }).click(); await P.locator('.empty, .sec').first().waitFor({ timeout: 30_000 }); }, { shot: true });
     expectNoBad(s, 'start', lang); await s.ctx.close();
   }
 };
@@ -482,7 +482,7 @@ let lastComment = null, lastUndos = 1;
 groups.portfolio = async () => {
   for (const lang of ['en', 'ar']) {
     const s = await session(lang), P = s.page, t = s.t; let pdf, waraq;
-    await goStart(s); await P.getByRole('button', { name: t('newPortfolio') }).click();
+    await goStart(s); await P.getByRole('button', { name: t('portfolio') }).click();
     await check('portfolio', 'add two PDFs as sections; titles come from the file names; rename one by typing', lang, P, async () => {
       const [c] = await Promise.all([P.waitForEvent('filechooser'), P.getByRole('button', { name: t('addSection') }).first().click()]); await c.setFiles([fx('three.pdf'), fx('small.pdf')]); await P.waitForFunction(() => document.querySelectorAll('.sec').length === 2, null, { timeout: 30_000 });
       await typeReal(s, P.locator('.sec .title').first(), lang === 'ar' ? 'الأسبوع الأول' : 'Week one'); must((await P.locator('.sec .title').first().inputValue()).length > 3, 'title');

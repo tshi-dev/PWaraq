@@ -1,12 +1,12 @@
 {
-  "version": "1.0.0-beta.3",
-  "notes": "Waraq 1.0 beta 3: install on iPhone/iPad/Android, Ctrl+wheel and pinch zoom everywhere, cover and type for drawings, protected PDFs stay protected.",
-  "pub_date": "2026-10-27T10:37:44.189Z",
+  "version": "1.0.0-beta.4",
+  "notes": "Waraq 1.0 beta 4: new start screen with 8 modes, Move area, Layers in Edit, small files after editing.",
+  "pub_date": "2026-11-03T14:45:57.626Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUd2NrcUVpMEdjZ05wUWdvWnFXRlM1YkQ0WnhQTHNHUCt3bFc3YzNXMkMxNHdxUVNSK0tiOENMWTFvZy9WdW5ndlFLUyswUnZPRUtQQ2FWMVNYK1I2U09pOExLSzEybkFRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzMDk3MzM5CWZpbGU6V2FyYXFfMS4wLjAtYmV0YS4zX3g2NC1zZXR1cC5leGUJdmVyc2lvbjoxLjAuMC1iZXRhLjMKQzljQ3EvZE9xUHVCd3FFNmdGNjZ3WTNwcGtwKzduS2tBVUdMTlZoeDMxamdwZk5JcXZBOWVTYnhTQnJYTVNwbGhxZVZTZFFTWElxanFpZ1pOaWdwQ0E9PQo=",
-      "url": "https://github.com/tshi-dev/PWaraq/releases/download/v1.0.0-beta.3/Waraq_1.0.0-beta.3_x64-setup.exe",
-      "sha256": "c9402b553e3c9ba5b94460242cc8f667bef37ebc2d6db82a62ea1ec331f45967"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUd2NrcUVpMEdjZ0xPbFFSaVBVUXYvd1NzREs3c3A3bUVydFY4U3BqQjNIbnZlaEkzRjNHakNlNE1jbXZuUUhVTkdWUG4zaWZyRy81Z2RNWXdCbHdvN2VISTIrd0Y3dmdvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzNzE2ODk2CWZpbGU6V2FyYXFfMS4wLjAtYmV0YS40X3g2NC1zZXR1cC5leGUJdmVyc2lvbjoxLjAuMC1iZXRhLjQKMDZjNis0enBtZ1hMUFptdDZUaldTd0ZEa01VUTBRMGRjNEJScTVRWXM3V050NXJLbDlYMktHc2lvb1BMUGp4WE5DWm1GTURBUWR4anJueDZzZEd2RFE9PQo=",
+      "url": "https://github.com/tshi-dev/PWaraq/releases/download/v1.0.0-beta.4/Waraq_1.0.0-beta.4_x64-setup.exe",
+      "sha256": "200a5282a4b77f0c41e6d0347f6bc9b1ca360a6f2bd340e5a713a701c3b4477e"
     }
   }
 }

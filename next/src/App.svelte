@@ -3,7 +3,7 @@
   import { onMount, tick } from 'svelte';
   import { EnginePool } from './lib/engine/pool';
   import { setDocument } from './lib/engine/page-cache';
-  import { i18n, t, toggleLanguage } from './lib/i18n.svelte';
+  import { i18n, t, toggleLanguage, type Key } from './lib/i18n.svelte';
   import ThemeButton from './components/ThemeButton.svelte';
   import { icon } from './lib/icons.js';
   import { recentList, remember, forget, reopen, pickFiles, saveFile, readPortfolio, writePortfolio, type Recent } from './lib/store';
@@ -30,11 +30,23 @@
   const previous = crash.previousRun(); // what the run before this one was doing, read before this run starts overwriting it
   crash.install();
   const pool = new EnginePool();
-  let doc = $state<{ name: string; sizes: { w: number; h: number }[]; bytes: Uint8Array; modified: boolean; password?: string; path?: string } | null>(null);
+  let doc = $state<{ name: string; sizes: { w: number; h: number }[]; bytes: Uint8Array; modified: boolean; password?: string; path?: string; task?: Key; extra?: File[] } | null>(null);
   let openedPath: string | undefined; // desktop: the file on disk behind `doc`, so Save writes straight back
   let portfolio = $state<PortfolioData | null>(null);
   let busy = $state(false), error = $state(''), over = $state(false), recent = $state<Recent[]>([]), again = $state(false);
   let picker: HTMLInputElement;
+  // a mode tile: the task the next opened file lands in, and (Combine) the other files chosen with it
+  let want: Key | undefined, extra: File[] = [];
+  const modes: { task: Key | 'portfolio'; name: Key; line: Key; icon: string }[] = [
+    { task: 'sign', name: 'sign', line: 'modeSignLine', icon: 'signature' },
+    { task: 'portfolio', name: 'portfolio', line: 'portfolioTile', icon: 'library' },
+    { task: 'ocr', name: 'modeOcr', line: 'modeOcrLine', icon: 'ocr' },
+    { task: 'organize', name: 'modeCombine', line: 'modeCombineLine', icon: 'merge' },
+    { task: 'forms', name: 'modeForms', line: 'modeFormsLine', icon: 'forms' },
+    { task: 'protect', name: 'modeShare', line: 'modeShareLine', icon: 'protect' },
+    { task: 'edit', name: 'modeDrawings', line: 'modeDrawingsLine', icon: 'layers' },
+    { task: 'comment', name: 'modeReview', line: 'modeReviewLine', icon: 'annotate' },
+  ];
 
   $effect(() => { document.documentElement.lang = i18n.lang; document.documentElement.dir = i18n.lang === 'ar' ? 'rtl' : 'ltr'; });
   const refresh = async () => (recent = await recentList());
@@ -83,7 +95,7 @@
     if (pool.repaired && !repairedOk) throw new Damaged(sizes.length); // asked first: "Open what could be read"
     if (!(doc?.name === name && modified)) { draftId = uid(); kept = null; } // a change to the open document keeps its draft; anything else starts a new one
     doc = null; portfolio = null; await tick(); // a new document gets a fresh workspace
-    doc = { name, sizes, bytes, modified, password, path: openedPath };
+    doc = { name, sizes, bytes, modified, password, path: openedPath, task: want, extra }; want = undefined; extra = [];
     keepDraft();
   }
   // a damaged PDF MuPDF could still read: shown on the start screen until the person chooses
@@ -154,13 +166,14 @@
     for (const [name, data] of Object.entries(entries)) await writePortfolio(m.id, name, data); // kept on this device from now on
     await showPortfolio(await load(pool, entries));
   }
-  async function showPortfolio(p: PortfolioData) { doc = null; portfolio = null; await tick(); portfolio = p; }
+  async function showPortfolio(p: PortfolioData) { want = undefined; extra = []; doc = null; portfolio = null; await tick(); portfolio = p; }
   async function startPortfolio() {
     await pool.reset();
     showPortfolio(newPortfolio(`${t('untitled')} ${new Date().toLocaleDateString(i18n.lang === 'ar' ? 'ar' : 'en-GB')}`));
   }
 
   async function openRecent(r: Recent) {
+    want = undefined; extra = [];
     busy = true; error = ''; again = false;
     try {
       if (r.kind === 'portfolio') {
@@ -176,12 +189,15 @@
     busy = false;
   }
 
-  async function pick() {
-    const [first] = await pickFiles({ accept: { 'application/pdf': ['.pdf'], 'application/zip': ['.waraq'], 'application/octet-stream': CONVERTIBLE_ACCEPT.split(',') }, fallback: () => picker.click() });
-    if (first) openFile(first.file, first.handle, first.path);
+  async function pick(multiple = false) {
+    picker.multiple = multiple;
+    const [first, ...rest] = await pickFiles({ multiple, accept: { 'application/pdf': ['.pdf'], 'application/zip': ['.waraq'], 'application/octet-stream': CONVERTIBLE_ACCEPT.split(',') }, fallback: () => picker.click() });
+    if (first) { extra = rest.map((r) => r.file); openFile(first.file, first.handle, first.path); }
   }
+  const plain = () => { want = undefined; return pick(); };
+  const tile = (task: Key | 'portfolio') => { if (task === 'portfolio') return startPortfolio(); want = task; return pick(task === 'organize'); };
   async function drop(e: DragEvent) {
-    e.preventDefault(); over = false;
+    e.preventDefault(); over = false; want = undefined; extra = [];
     const file = e.dataTransfer?.files[0], item = e.dataTransfer?.items[0];
     const handle = await (item as any)?.getAsFileSystemHandle?.().catch(() => null);
     openFile(file, handle?.kind === 'file' ? handle : undefined);
@@ -225,10 +241,10 @@
 {/if}
 <Notice message={notice} slow={health?.kind === 'slow'} oncancel={() => pool.cancelAll()} />
 {#if isDesktop}<TitleBar flush={!!(doc || portfolio)} float={!!(doc || portfolio)} /><PackPrompt />{/if}
-<input bind:this={picker} type="file" accept="application/pdf,.pdf,.waraq,{CONVERTIBLE_ACCEPT}" hidden onchange={(e) => { openFile(e.currentTarget.files?.[0]); e.currentTarget.value = ''; }} />
+<input bind:this={picker} type="file" accept="application/pdf,.pdf,.waraq,{CONVERTIBLE_ACCEPT}" hidden onchange={(e) => { const [f, ...rest] = Array.from(e.currentTarget.files ?? []); extra = rest; openFile(f); e.currentTarget.value = ''; }} />
 
 {#if doc}
-  <Workspace {pool} sizes={doc.sizes} name={doc.name} bytes={doc.bytes} modified={doc.modified} password={doc.password} onOpen={pick} onClose={close} onSave={() => save()} onSaveAs={() => save(true)}
+  <Workspace {pool} sizes={doc.sizes} name={doc.name} bytes={doc.bytes} modified={doc.modified} password={doc.password} task={doc.task} extra={doc.extra} onOpen={plain} onClose={close} onSave={() => save()} onSaveAs={() => save(true)}
     onReplace={(bytes, pw) => show(bytes, doc!.name, true, pw)} />
 {:else if portfolio}
   <Portfolio {pool} {portfolio} onClose={close} />
@@ -237,14 +253,16 @@
     ondragover={(e) => { e.preventDefault(); over = true; }} ondragleave={() => (over = false)} ondrop={drop}>
     <span class="lang"><ThemeButton /><button class="btn icon" onclick={toggleLanguage} aria-label={t('language')} title={t('language')}>{@html icon('language')}</button></span>
     <div class="hero">
-      <img src="/brand-mark.svg" alt="" width="72" height="72" />
+      <img src="/brand-mark.svg" alt="" width="56" height="56" />
       <h1>{t('appName')}</h1>
       <p class="tag">{t('tagline')}</p>
+    </div>
+    <section class="open" aria-labelledby="open-h">
+      <h2 id="open-h">{t('startOpenTitle')}</h2>
+      <p class="muted">{t('dropHere')}</p>
       <div class="actions">
-        <button class="btn primary big" onclick={pick} disabled={busy}>{@html icon('upload')}{busy ? t('reading') : t('open')}</button>
-        <button class="btn big" onclick={startPortfolio} disabled={busy}>{@html icon('library')}{t('newPortfolio')}</button>
+        <button class="btn primary big" onclick={plain} disabled={busy}>{@html icon('upload')}{busy ? t('reading') : t('open')}</button>
       </div>
-      <p class="muted">{t('dropHere')} · {t('portfolioHint')}</p>
       {#if locked}
         <form class="lock" onsubmit={unlockOpen}>
           <label for="pdfpw">{@html icon('protect')}{t('needsPassword')} <strong>{locked.name}</strong></label>
@@ -268,8 +286,16 @@
       {#if closed}
         <button class="btn" onclick={undoClose}>{@html icon('undo')}{t('undoClose').replace('{name}', closed.name)}</button>
       {/if}
-      {#if error}<p class="error" role="alert">{error}</p>{#if again}<button class="btn" onclick={pick}>{t('chooseFile')}</button>{/if}{/if}
-    </div>
+      {#if error}<p class="error" role="alert">{error}</p>{#if again}<button class="btn" onclick={plain}>{t('chooseFile')}</button>{/if}{/if}
+    </section>
+    <section class="modes" aria-labelledby="modes-h">
+      <h2 id="modes-h">{t('modesTitle')}</h2>
+      <ul>
+        {#each modes as m (m.task)}
+          <li><button class="mode" data-task={m.task} onclick={() => tile(m.task)} disabled={busy}>{@html icon(m.icon)}<strong>{t(m.name)}</strong><span class="muted">{t(m.line)}</span></button></li>
+        {/each}
+      </ul>
+    </section>
     <section class="recent" aria-labelledby="recent-h">
       <h2 id="recent-h">{t('recent')}</h2>
       {#if recent.length}
@@ -320,15 +346,25 @@
   .start { position: relative; height: 100%; overflow-y: auto; display: grid; align-content: start; justify-items: center; gap: var(--s-32); padding: var(--s-48) var(--s-24) var(--s-24); }
   .start.over { background: var(--green-soft); outline: 2px dashed var(--green); outline-offset: -16px; }
   .lang { display: flex; gap: var(--s-8); position: absolute; top: var(--s-16); inset-inline-end: var(--s-16); }
-  .hero { display: grid; justify-items: center; gap: var(--s-12); text-align: center; }
-  h1 { margin: 0; font-size: var(--fs-40); line-height: 1.2; }
-  .tag { margin: 0 0 var(--s-8); color: var(--muted); font-size: var(--fs-18); max-width: 36ch; }
+  .hero { display: grid; justify-items: center; gap: var(--s-8); text-align: center; }
+  h1 { margin: 0; font-size: var(--fs-32); line-height: 1.2; }
+  .tag { margin: 0; color: var(--muted); font-size: var(--fs-16); max-width: 36ch; }
   .actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s-12); }
   .big { min-height: 48px; padding: 0 var(--s-24); font-size: var(--fs-16); }
   .muted { margin: 0; color: var(--muted); }
   .small { font-size: var(--fs-12); }
   .error { color: var(--danger); margin: 0; }
-  .recent { width: min(960px, 100%); }
+  .open, .modes, .recent { width: min(960px, 100%); }
+  .open { display: grid; justify-items: center; gap: var(--s-12); padding: var(--s-32) var(--s-24); border: 1px dashed var(--line); border-radius: var(--r-12); background: var(--surface); text-align: center; }
+  .open h2 { margin: 0; font-size: var(--fs-24); }
+  .modes ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s-12); }
+  .mode { width: 100%; height: 100%; display: grid; align-content: start; justify-items: start; gap: var(--s-4); padding: var(--s-16); border: 1px solid var(--line); border-radius: var(--r-12); background: var(--surface); text-align: start; }
+  .mode:hover:not(:disabled) { border-color: var(--green); background: var(--green-soft); }
+  .mode :global(svg) { width: 24px; height: 24px; color: var(--green); margin-block-end: var(--s-8); }
+  .mode strong { font-size: var(--fs-16); }
+  .mode .muted { font-size: var(--fs-14); }
+  @media (max-width: 960px) { .modes ul { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 600px) { .modes ul { grid-template-columns: 1fr; } .open { padding: var(--s-24) var(--s-16); } }
   h2 { margin: 0 0 var(--s-12); font-size: var(--fs-18); }
   .recent ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--s-12); }
   .recent li { position: relative; }

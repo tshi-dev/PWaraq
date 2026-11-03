@@ -87,6 +87,13 @@ grayscale:'<circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="
   info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v6M11 11h1M10 17h4"/><circle cx="12" cy="7" r=".6"/>',
   warning:'<path d="M12 3l10 18H2zM12 9v5"/><circle cx="12" cy="17.5" r=".6"/>',
   link:'<path d="M10 14l4-4M8 16l-1 1a3 3 0 0 1-4-4l4-4a3 3 0 0 1 4 0M16 8l1-1a3 3 0 0 1 4 4l-4 4a3 3 0 0 1-4 0"/>',
+  layers:'<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 12.5l9 5 9-5M3 17l9 5 9-5"/>',
+  eye:'<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  'eye-off':'<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M4 4l16 16"/>',
+  'to-front':'<path d="M12 20V9M7 14l5-5 5 5M5 4h14"/>',
+  forward:'<path d="M12 19V6M7 11l5-5 5 5"/>',
+  backward:'<path d="M12 5v13M7 13l5 5 5-5"/>',
+  'to-back':'<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
   zoom:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21M7.5 10.5h6M10.5 7.5v6"/>'
 };
 const aliases = {pageEditor:'annotate',cadToPdf:'office',fixArabic:'ocr',sign:'signature',batch:'merge',optimize:'compress',

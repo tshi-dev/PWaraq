@@ -15,7 +15,7 @@
   --fs-12: 12px; --fs-14: 14px; --fs-16: 16px; --fs-18: 18px; --fs-20: 20px; --fs-24: 24px; --fs-32: 32px; --fs-40: 40px;
   --s-4: 4px; --s-8: 8px; --s-12: 12px; --s-16: 16px; --s-24: 24px; --s-32: 32px; --s-48: 48px;
   --r-8: 8px; --r-12: 12px; --r-16: 16px;
-  --control: 36px; --touch: 40px;
+  --control: 36px; --touch: 40px; --thumb: 32px;
   --shadow: 0 5px 20px #204b3814, 0 1px 2px #204b380f;
   --font: 'Segoe UI Variable Text', 'Segoe UI', Tajawal, system-ui, sans-serif;
   color-scheme: light;

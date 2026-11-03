@@ -12,7 +12,9 @@ import { logicalOrder, guessDirection, isMark, isRtl } from './bidi.ts';
 
 export type Box = { x: number; y: number; w: number; h: number };
 export type Align = 'left' | 'center' | 'right';
-export type Edit =
+// `z`: where the thing is drawn among the others (the Layers panel's order): lower first, equal or missing keeps the old order
+// (moved pictures, white covers, moved areas, new photos, new text). What a move area leaves behind is cleaned at z -1, below all.
+export type Edit = (
   // a text box (`from`: the existing line it replaces, which is removed first); lines wrap at the box width, or with `fit` stay one line shrunk to the width
   | ({ kind: 'text'; text: string; size: number; color: number[]; bold: boolean; align: Align; from?: Box; fit?: boolean } & Box)
   // a new photo (photos[photo]) filling the box
@@ -21,7 +23,10 @@ export type Edit =
   | ({ kind: 'image'; index: number; from: Box; photo?: number; removed?: boolean } & Box)
   // redaction: text, photo pixels and lines under the box removed from the page for good, a black box in their place
   // (white: a white box, to write over — a "white-out" for drawings and scans)
-  | ({ kind: 'redact'; white?: boolean } & Box);
+  | ({ kind: 'redact'; white?: boolean } & Box)
+  // move area: what is inside `from` (text and lines stay real, pictures stay pictures) is cut out of its place and drawn in the box (same size)
+  | ({ kind: 'move'; from: Box } & Box)
+) & { z?: number };
 
 /** Text box layout shared with the editor screen: first baseline `BASELINE`·size below the box top, lines `LEADING`·size apart. */
 export const LEADING = 1.3, BASELINE = 1.0;
@@ -183,11 +188,12 @@ export function editPage(m: typeof MuPDF, src: MuPDF.PDFDocument, index: number,
   let page = out.loadPage(0);
   const obj = page.getObject(), T = page.getTransform(), inv = m.Matrix.invert(T), H = page.getBounds()[3];
   const images = imageBlocks(page), xobjects = obj.get('Resources', 'XObject');
-  const draw: string[] = [], added: Record<string, MuPDF.PDFObject> = {};
+  const draw: { z: number; ops: string }[] = [], added: Record<string, MuPDF.PDFObject> = {};
   // an image drawn by `fz` (MuPDF's image matrix: the unit square to the page as seen, first row at the top)
-  const place = (ref: MuPDF.PDFObject, fz: MuPDF.Matrix) => {
+  const put = (z: number | undefined, ops: string) => draw.push({ z: z ?? 0, ops });
+  const place = (ref: MuPDF.PDFObject, fz: MuPDF.Matrix, z?: number) => {
     const name = 'WqI' + Object.keys(added).length, cm = m.Matrix.concat(m.Matrix.concat(FLIP, fz), inv);
-    added[name] = ref; draw.push(`q ${cm.map(n).join(' ')} cm /${name} Do Q`);
+    added[name] = ref; put(z, `q ${cm.map(n).join(' ')} cm /${name} Do Q`);
   };
   const upright = (img: MuPDF.Image, b: Box): MuPDF.Matrix => { // the photo inside the box, keeping its shape
     const k = Math.min(b.w / img.getWidth(), b.h / img.getHeight()), w = img.getWidth() * k, h = img.getHeight() * k;
@@ -208,10 +214,10 @@ export function editPage(m: typeof MuPDF, src: MuPDF.PDFDocument, index: number,
       const name = names.get(e)!, b = images[e.index], keep = name ? xobjects.get(name) : null;
       if (name) xobjects.put(name, empty); else redactImages.push(e.from);
       if (lift || e.removed) continue;
-      if (e.photo != null) { const img = new m.Image(photos[e.photo]); place(out.addImage(img), upright(img, e)); continue; }
+      if (e.photo != null) { const img = new m.Image(photos[e.photo]); place(out.addImage(img), upright(img, e), e.z); continue; }
       // moved / resized: the same picture (turns and flips kept), its box mapped onto the new one
       const to = m.Matrix.concat(m.Matrix.concat(m.Matrix.translate(-e.from.x, -e.from.y), m.Matrix.scale(e.w / e.from.w, e.h / e.from.h)), m.Matrix.translate(e.x, e.y));
-      place(keep ?? out.addImage(b.image), m.Matrix.concat(b.transform, to));
+      place(keep ?? out.addImage(b.image), m.Matrix.concat(b.transform, to), e.z);
     }
     if (e.kind === 'text' && e.from) {
       // a band through the letters' middle (every glyph's box crosses it; the next lines' ascenders and descenders do
@@ -241,6 +247,16 @@ export function editPage(m: typeof MuPDF, src: MuPDF.PDFDocument, index: number,
       for (const mk of marks) redactText.push(limit(mk, mk.y + mk.h / 2));
     }
   }
+  // move areas: the page as it was (contents + resources, taken before the redactions replace them) becomes a form, drawn later clipped to each area
+  type Move = Extract<Edit, { kind: 'move' }>;
+  const moves = edits.filter((e): e is Move => e.kind === 'move' && (lift || e.x !== e.from.x || e.y !== e.from.y));
+  let whole: MuPDF.PDFObject | null = null;
+  if (moves.length && !lift) {
+    const c = obj.get('Contents'), parts = (c.isArray() ? [...Array(c.length).keys()].map((i) => c.get(i)) : c.isNull() ? [] : [c]).map((x) => x.readStream().asUint8Array());
+    const bytes = new Uint8Array(parts.reduce((k, p) => k + p.length + 1, 0));
+    parts.reduce((k, p) => { bytes.set(p, k); bytes[k + p.length] = 10; return k + p.length + 1; }, 0);
+    whole = out.addStream(bytes, { Type: 'XObject', Subtype: 'Form', BBox: obj.getInheritable('MediaBox'), Resources: obj.getInheritable('Resources') });
+  }
   const redact = (boxes: Box[], imageMethod: number, textMethod: number) => {
     if (!boxes.length) return;
     for (const b of boxes) page.createAnnotation('Redact').setRect([b.x, b.y, b.x + b.w, b.y + b.h]);
@@ -248,7 +264,8 @@ export function editPage(m: typeof MuPDF, src: MuPDF.PDFDocument, index: number,
   };
   redact(redactImages, 1, 1); // remove images there, keep text and lines
   redact(redactText, 0, 0); // remove text there, keep images and lines
-  const hide = edits.filter((e): e is Extract<Edit, { kind: 'redact' }> => e.kind === 'redact');
+  // the place an area leaves is cleaned like a white cover
+  const hide = [...edits.filter((e): e is Extract<Edit, { kind: 'redact' }> => e.kind === 'redact'), ...moves.map((e): Extract<Edit, { kind: 'redact' }> => ({ kind: 'redact', white: true, z: -1, ...e.from }))];
   for (const white of [false, true]) { // before new text and photos, which stay
     const boxes = hide.filter((b) => !!b.white === white);
     if (!boxes.length) continue;
@@ -256,17 +273,25 @@ export function editPage(m: typeof MuPDF, src: MuPDF.PDFDocument, index: number,
     page.applyRedactions(!white, 2, 1, 0);
   }
   // a white cover: what is under it is removed the same way, then it is filled white, under everything new (also in the editor's background)
-  const covers = hide.filter((b) => b.white).map((b) => `${n(b.x)} ${n(H - b.y - b.h)} ${n(b.w)} ${n(b.h)} re`).join(' ');
-  if (covers) draw.push(`q ${m.Matrix.concat([1, 0, 0, -1, 0, H], inv).map(n).join(' ')} cm 1 1 1 rg ${covers} f Q`);
+  for (const b of hide) if (b.white) put(b.z, `q ${m.Matrix.concat([1, 0, 0, -1, 0, H], inv).map(n).join(' ')} cm 1 1 1 rg ${n(b.x)} ${n(H - b.y - b.h)} ${n(b.w)} ${n(b.h)} re f Q`);
+  if (whole) { // the areas, on top of the cleaned page: clipped to where they were, shifted by how far they moved
+    added.WqM = whole;
+    const pt = (x: number, y: number) => `${n(inv[0] * x + inv[2] * y + inv[4])} ${n(inv[1] * x + inv[3] * y + inv[5])}`;
+    for (const e of moves) {
+      const { x, y, w, h } = e.from, cm = m.Matrix.concat(m.Matrix.concat(T, m.Matrix.translate(e.x - x, e.y - y)), inv);
+      put(e.z, `q ${cm.map(n).join(' ')} cm ${pt(x, y)} m ${pt(x + w, y)} l ${pt(x + w, y + h)} l ${pt(x, y + h)} l h W n /WqM Do Q`); // the clip moves with the content
+    }
+  }
   const resources: Record<string, Record<string, MuPDF.PDFObject>> = { XObject: added };
 
   if (!lift) {
-    for (const e of edits) if (e.kind === 'photo') { const img = new m.Image(photos[e.photo]); place(out.addImage(img), upright(img, e)); }
+    for (const e of edits) if (e.kind === 'photo') { const img = new m.Image(photos[e.photo]); place(out.addImage(img), upright(img, e), e.z); }
     if (texts.length) {
-      const lines: Line[] = [], shaped = own && writer(m, own, out);
-      let ops = '';
+      const shaped = own && writer(m, own, out);
+      let tw: ReturnType<typeof pageWriter> | null = null; // one drawing per text, so each takes its place in the order
       for (const e of texts) {
-        const hint = hints.get(e), f = hint ? null : fonts!();
+        const lines: Line[] = [], hint = hints.get(e), f = hint ? null : fonts!();
+        let ops = '';
         const width = hint ? (t: string) => shaped!.measure({ text: t, x: 0, y: 0, size: e.size, color: e.color, align: 'left', bold: e.bold, hint }) : (t: string) => widthOf(f!, e.bold)(t, e.size);
         (e.fit || hint ? [e.text.replace(/\s*\n\s*/g, ' ')] : wrap(width, e.text, e.w)).forEach((text, i) => { // a replaced line, or fit: one line, squeezed into the box when wider
           const l = { text, size: e.size, color: e.color, align: e.align, y: e.y + (BASELINE + i * LEADING) * e.size, x: e.align === 'right' ? e.x + e.w : e.align === 'center' ? e.x + e.w / 2 : e.x };
@@ -276,17 +301,27 @@ export function editPage(m: typeof MuPDF, src: MuPDF.PDFDocument, index: number,
           else if (shaped) ops += shaped.draw({ ...l, bold: e.bold, hint: { name: 'Tajawal' }, ...(e.fit ? { fit: e.w } : {}) }, H);
           else lines.push({ ...l, bold: e.bold, ...(e.fit ? { max: e.w } : {}) });
         });
+        if (lines.length) ops += (tw ??= pageWriter(m, out, fonts!())).draw({ w: 0, h: H, lines });
+        // the writers work top-down on the page as seen; this matrix takes that to the page's own coordinates
+        put(e.z, `q ${m.Matrix.concat([1, 0, 0, -1, 0, H], inv).map(n).join(' ')} cm ${ops} Q`);
       }
-      const tw = lines.length ? pageWriter(m, out, fonts!()) : null;
-      if (tw) ops += tw.draw({ w: 0, h: H, lines });
-      // the writers work top-down on the page as seen; this matrix takes that to the page's own coordinates
-      draw.push(`q ${m.Matrix.concat([1, 0, 0, -1, 0, H], inv).map(n).join(' ')} cm ${ops} Q`);
       tw?.finish(); shaped?.finish();
       resources.Font = { ...tw?.fonts, ...shaped?.fonts };
     }
   }
-  if (draw.length) { page.destroy(); stamp(out, out.findPage(0), draw.join('\n'), resources); page = out.loadPage(0); }
+  if (draw.length) { page.destroy(); stamp(out, out.findPage(0), draw.sort((a, b) => a.z - b.z).map((d) => d.ops).join('\n'), resources); page = out.loadPage(0); }
   page.destroy();
+  return out;
+}
+
+/** Image `i` of the page alone (page `index` of `src` with everything else taken away), as a one-page PDF: the editor's picture of a photo being moved. */
+export function pictureOf(m: typeof MuPDF, src: MuPDF.PDFDocument, index: number, i: number): MuPDF.PDFDocument {
+  const out = new m.PDFDocument();
+  out.graftPage(-1, src, index);
+  const page = out.loadPage(0), b = imageBlocks(page)[i], obj = page.getObject(), inv = m.Matrix.invert(page.getTransform());
+  page.destroy();
+  obj.delete('Annots'); obj.put('Contents', out.addStream('', {}));
+  if (b) stamp(out, out.findPage(0), `q ${m.Matrix.concat(m.Matrix.concat(FLIP, b.transform), inv).map(n).join(' ')} cm /WqP Do Q`, { XObject: { WqP: out.addImage(b.image) } });
   return out;
 }
 

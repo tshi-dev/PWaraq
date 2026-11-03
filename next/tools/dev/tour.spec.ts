@@ -36,7 +36,7 @@ test('tour', async ({ page }) => {
 
   // 3. Portfolio: two weeks, a divider page, a photo, contents
   await page.locator('.end .btn').nth(2).click(); // close
-  await page.locator('.actions .btn').nth(1).click();
+  await page.getByRole('button', { name: 'حافظة' }).click();
   const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.locator('.empty').click()]);
   await chooser.setFiles([week1, week2]);
   await expect(page.locator('.sec')).toHaveCount(2);

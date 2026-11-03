@@ -71,7 +71,7 @@ for (const [lang, theme] of COMBOS) test(`portfolio: long names and titles are f
   const title = lang === 'ar' ? TITLE_AR : TITLE_EN;
   await page.addInitScript(([l, th]) => { localStorage.setItem('waraq-lang', l); localStorage.setItem('waraq-theme', th); }, [lang, theme]);
   await page.goto('/');
-  await page.locator('.actions .btn').nth(1).click(); // New portfolio
+  await page.getByRole('button', { name: lang === 'ar' ? 'حافظة' : 'Portfolio' }).click();
   const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.locator('.empty').click()]);
   await chooser.setFiles([fixture('three.pdf')]);
   await expect(page.locator('.sec')).toHaveCount(1);

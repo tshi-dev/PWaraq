@@ -16,7 +16,7 @@
   import { zip } from '../lib/zip';
   import { addUnique } from '../lib/names';
 
-  let { pool, sizes, name, changed = $bindable(false) }: { pool: EnginePool; sizes: { w: number; h: number }[]; name: string; changed?: boolean } = $props();
+  let { pool, sizes, name, extra = [], changed = $bindable(false) }: { pool: EnginePool; sizes: { w: number; h: number }[]; name: string; extra?: File[]; changed?: boolean } = $props();
 
   // svelte-ignore state_referenced_locally (one Organize per opened document)
   let groups = $state<Group[]>([{ id: 'doc', items: sizes.map((s, page) => ({ id: uid(), doc: 0, page, rotate: 0, w: s.w, h: s.h })) }]);
@@ -32,6 +32,9 @@
   function redo() { if (!future.length) return; past.push($state.snapshot(groups)); groups = future.pop()!; canRedo = !!future.length; canUndo = true; }
 
   const items = () => groups[0].items;
+  // Combine on the start screen: the other files chosen with the first go to the end
+  // svelte-ignore state_referenced_locally
+  if (extra.length) queueMicrotask(() => insertFiles(extra, items().length));
   const sel = () => new Set(selected);
   // new pages go after the last selected page, or at the end
   const insertIndex = () => { const i = items().findLastIndex((it) => selected.has(it.id)); return i < 0 ? items().length : i + 1; };
