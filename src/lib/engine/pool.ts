@@ -234,3 +234,6 @@ export class EnginePool {
 
   destroy() { clearInterval(this.watch); this.workers.forEach((w) => w.terminate()); }
 }
+
+/** A save the person cancelled (the open-password question), or a job the app dropped itself: nothing to tell them. */
+export const isCancelled = (e: unknown) => (e as Error)?.message === 'cancelled';

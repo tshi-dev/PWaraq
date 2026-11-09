@@ -3,7 +3,7 @@
   // blank page, extracts, turns, deletes, undoes. Changes are applied to the document when leaving Organize or saving
   // (the Save button in the top bar).
   import { SvelteSet } from 'svelte/reactivity';
-  import type { EnginePool } from '../lib/engine/pool';
+  import { isCancelled, type EnginePool } from '../lib/engine/pool';
   import { t } from '../lib/i18n.svelte';
   import { icon } from '../lib/icons.js';
   import Sheet from './Sheet.svelte';
@@ -73,7 +73,7 @@
       const chosen = items().filter((it) => selected.has(it.id)), first = items().indexOf(chosen[0]) + 1;
       const bytes = await pool.keep(await pool.build({ items: toItems(chosen) }));
       await saveFile(bytes, name.replace(/\.pdf$/i, '') + ` (${t('pages')} ${first}-${first + chosen.length - 1}).pdf`);
-    } finally { busy = false; }
+    } catch (e) { if (!isCancelled(e)) throw e; } finally { busy = false; }
   }
 
   // side panels: Split (into several files, saved together as one ZIP) and Crop
@@ -96,7 +96,7 @@
         at += part.length;
       }
       await saveFile(zip(files), `${base} (${t('split')}).zip`, 'application/zip');
-    } finally { busy = false; }
+    } catch (e) { if (!isCancelled(e)) throw e; } finally { busy = false; }
   }
   const cropTarget = $derived(items().find((it) => selected.has(it.id)) ?? items()[0]);
   function cropped(crop: number[] | undefined, all: boolean) {

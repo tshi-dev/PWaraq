@@ -95,3 +95,29 @@ test('owner password only: Skip opens the file; a save asks for the open passwor
   });
   stillLocked(file.bytes, 2);
 });
+
+test('a cancelled open-password question is quiet: no alert, no error, the edits stay', async ({ page }, info) => {
+  test.setTimeout(120_000);
+  const alerts: string[] = [];
+  page.on('dialog', (d) => { alerts.push(d.message()); void d.dismiss(); });
+  await page.goto('/');
+  await page.locator('input[type=file]').first().setInputFiles(lockedFile(info.outputPath('quiet.pdf'), fixture('three.pdf')));
+  await page.locator('#pdfpw').fill('own');
+  await page.locator('.lock').getByRole('button', { name: 'Open' }).click();
+  await page.locator('.lock').getByRole('button', { name: 'Skip' }).click();
+  await expect(page.locator('.page').first()).toBeVisible({ timeout: 60_000 });
+  await page.getByRole('button', { name: 'Organize' }).click();
+  await page.locator('.cell').nth(1).click();
+  await page.keyboard.press('Delete');
+  await page.locator('.cell').first().click();
+  await page.getByRole('button', { name: 'Extract', exact: true }).click();
+  const ask = page.getByRole('dialog', { name: 'Type the open password to save' });
+  await expect(ask).toBeVisible();
+  await ask.getByRole('button', { name: 'Cancel' }).click();
+  await expect(ask).toBeHidden();
+  await page.getByRole('button', { name: 'View', exact: true }).click(); // leaving Organize asks again; cancelled again
+  await expect(ask).toBeVisible();
+  await ask.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.locator('.cell')).toHaveCount(2); // nothing lost
+  expect(alerts).toEqual([]);
+});

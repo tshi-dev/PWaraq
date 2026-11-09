@@ -1,6 +1,7 @@
 <script lang="ts">
   // The document workspace: one task bar on top, thumbnails on the left, the page in the middle.
-  import type { EnginePool } from '../lib/engine/pool';
+  import { isCancelled, type EnginePool } from '../lib/engine/pool';
+  import { tick } from 'svelte';
   import { t, toggleLanguage, type Key } from '../lib/i18n.svelte';
   import ThemeButton from './ThemeButton.svelte';
   import { icon } from '../lib/icons.js';
@@ -30,8 +31,8 @@
   async function task_(next: Key) {
     if (next === mode) return;
     if (next === 'organize' && mode === 'view') { mode = 'organize'; return; }
-    if (mode === 'organize' && organized && organize) { applying = true; try { await replaceKept(await organize.build()); } catch { alert(t('toolFailed')); } finally { applying = false; } }
-    else if (mode === 'comment' && commented && comment) { applying = true; try { await replaceKept(await comment.build()); } catch { alert(t('toolFailed')); } finally { applying = false; } }
+    if (mode === 'organize' && organized && organize) { applying = true; try { await replaceKept(await organize.build()); } catch (e) { if (!isCancelled(e)) alert(t('toolFailed')); } finally { applying = false; } }
+    else if (mode === 'comment' && commented && comment) { applying = true; try { await replaceKept(await comment.build()); } catch (e) { if (!isCancelled(e)) alert(t('toolFailed')); } finally { applying = false; } }
     else mode = (['edit', 'organize', 'sign', 'convert', 'protect', 'redact', 'forms', 'ocr', 'comment'].includes(next) ? next : 'view') as typeof mode;
   }
   // Edit: the page editor on the current page; saving puts the edited page in its place and opens the document again
@@ -49,11 +50,12 @@
   }
   async function save(as = false) {
     if ((mode === 'edit' && editScope === 'page') || mode === 'sign') return; // the editor / signing mode saves its page first (Save page)
-    if (mode === 'organize' && organized && organize) { applying = true; try { await replaceKept(await organize.build()); } catch { alert(t('toolFailed')); return; } finally { applying = false; } }
-    if (mode === 'comment' && commented && comment) { applying = true; try { await replaceKept(await comment.build()); } catch { alert(t('toolFailed')); return; } finally { applying = false; } }
+    if (mode === 'organize' && organized && organize) { applying = true; try { await replaceKept(await organize.build()); } catch (e) { if (!isCancelled(e)) alert(t('toolFailed')); return; } finally { applying = false; } }
+    if (mode === 'comment' && commented && comment) { applying = true; try { await replaceKept(await comment.build()); } catch (e) { if (!isCancelled(e)) alert(t('toolFailed')); return; } finally { applying = false; } }
     if (as) onSaveAs(); else onSave();
   }
   let viewer = $state() as Viewer;
+  async function showPage(n: number) { mode = 'view'; await tick(); setTimeout(() => viewer?.goTo(n), 150); } // a page link in the report
   let current = $state(1);
   let showThumbs = $state(true);
   let pageInput = $state('1');
@@ -164,7 +166,7 @@
       </div>
     {/if}
     {#if mode !== 'edit' || editScope === 'document'}
-    <DocTools {pool} kind={mode === 'edit' ? 'stamp' : mode} {sizes} {name} {bytes} {password} {onReplace} />
+    <DocTools {pool} kind={mode === 'edit' ? 'stamp' : mode} {sizes} {name} {bytes} {password} {onReplace} onGoto={showPage} />
     {:else}
     <PageEditor {pool} base={{ doc: 0, page: editPage - 1 }} label="{t('page')} {editPage} {t('of')} {sizes.length}" onSave={edited} onCancel={() => (mode = 'view')} />
     {/if}

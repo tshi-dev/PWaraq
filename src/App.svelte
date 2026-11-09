@@ -53,7 +53,7 @@
   // recovery: engine health, drafts of unsaved work, the last closed document
   let health = $state<Health | null>(null), notice = $state(''), drafts = $state<Draft[]>([]), closed = $state<{ name: string; bytes: Uint8Array; modified: boolean; path?: string } | null>(null);
   let restoredWork = $state(false); // the person chose Restore: only then "your work was restored" is true
-  let report = $state<Entry[]>([]), crashes = $state(0), copied = $state(false), quietExit = $state(false);
+  let report = $state<Entry[]>([]), lastReport = $state(false), crashes = $state(0), copied = $state(false), quietExit = $state(false);
   async function copyReport() { if (await crash.copyReport()) { copied = true; setTimeout(() => (copied = false), 3000); } }
   let draftId = uid(), kept: Uint8Array | null = null, closeTimer: ReturnType<typeof setTimeout>;
   pool.onHealth = (h) => {
@@ -290,7 +290,7 @@
 </script>
 
 {#if report.length && !drafts.length}
-  <CrashReport entry={report[0]} restored={restoredWork} onclose={() => { crash.markSeen(report); report = []; }} />
+  <CrashReport entry={report[0]} restored={restoredWork} last={lastReport} onclose={() => { crash.markSeen(report); report = []; lastReport = false; }} />
 {/if}
 {#if needOpen}
   <dialog bind:this={needDialog} class="needopen" aria-labelledby="need-h" oncancel={(e) => { e.preventDefault(); needOpen?.(null); }}>
@@ -404,7 +404,7 @@
     {/if}
     <p class="crashrow">
       {#if quietExit && !drafts.length}<span class="muted small" role="status">{t('closedQuietly')}</span>{/if}
-      {#if crashes}<button class="btn primary" onclick={async () => { report = (await crash.entries()).slice(0, 1); }}>{t('sendLastReport')}</button>{/if}
+      {#if crashes}<button class="btn primary" onclick={async () => { report = (await crash.entries()).slice(0, 1); lastReport = true; }}>{t('sendLastReport')}</button>{/if}
       <button class="btn" onclick={reportProblem}>{t('reportProblem')}</button>
       {#if crashes}
         <button class="btn" onclick={copyReport}>{copied ? t('crashCopied') : t('copyCrash')}</button>

@@ -30,20 +30,31 @@ test('share safely: the check finds a fake redaction, the author and a comment; 
   await page.getByRole('button', { name: 'Protect' }).click();
   await page.getByRole('button', { name: 'Check this file' }).click();
   const list = page.locator('.finds');
+  await expect(page.locator('.sum')).toHaveText('3 things found');
   await expect(list).toContainText('Black boxes with the text still under them: 1');
   await expect(list).toContainText('Author');
   await expect(list).toContainText('Sami Writer');
   await expect(list).toContainText('Comments and annotations: 1');
+  await expect(page.locator('.pf').getByRole('button', { name: 'Fix all' })).toBeVisible(); // the only primary in the pinned footer
   await clean(page, 'findings');
   await page.screenshot({ path: info.outputPath('findings-en.png') });
+
+  await page.getByRole('button', { name: 'Go to page 1' }).first().click(); // the page link opens the view on that page, and the report is still there on return
+  await expect(page.locator('#pageno')).toHaveValue('1');
+  await page.getByRole('button', { name: 'Protect' }).click();
+  await expect(page.locator('.sum')).toHaveText('3 things found');
 
   await page.getByRole('button', { name: 'Redact for real' }).click(); // the document is replaced, then checked again
   await expect(page.locator('.state')).toHaveText('Done. The file was checked again.', { timeout: 30_000 });
   await expect(list).not.toContainText('Black boxes');
-  await page.getByRole('button', { name: 'Remove details' }).click();
-  await expect(list).not.toContainText('Sami Writer', { timeout: 30_000 });
-  await page.getByRole('button', { name: 'Remove comments' }).click();
-  await expect(page.locator('.clean')).toContainText('Nothing found', { timeout: 30_000 });
+  await expect(page.locator('.finds .done')).toHaveCount(1);
+  await expect(page.locator('.sum')).toHaveText('2 things found');
+  await page.getByRole('button', { name: 'Fix all' }).click(); // details, then comments, one after the other
+  await expect(page.locator('.clean')).toContainText('Nothing found — safe to share', { timeout: 60_000 });
+  await expect(page.locator('.finds .done')).toHaveCount(3);
+  await expect(list).not.toContainText('Sami Writer');
+  await clean(page, 'all fixed');
+  await page.screenshot({ path: info.outputPath('fixed-en.png') });
 
   const file = await saved(page, () => page.getByRole('button', { name: 'Save', exact: true }).first().click());
   const d = m.Document.openDocument(file.bytes, 'application/pdf');
@@ -58,7 +69,7 @@ test('share safely: Arabic, the findings list follows the design rules', async (
   await page.addInitScript(() => localStorage.setItem('waraq-lang', 'ar'));
   await open(page, risky(info.outputPath('risky-ar.pdf')));
   await page.locator('.task').nth(5).click();
-  await page.locator('.side .btn').first().click();
+  await page.locator('.side .pf .btn.primary').click();
   await expect(page.locator('.finds > li')).toHaveCount(3, { timeout: 30_000 });
   await clean(page, 'findings (ar)');
   await page.screenshot({ path: info.outputPath('findings-ar.png') });

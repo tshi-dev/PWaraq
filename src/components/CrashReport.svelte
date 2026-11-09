@@ -7,7 +7,7 @@
   import { isDesktop, openExternal } from '../lib/desktop';
   import { version } from '../lib/update.svelte';
 
-  let { entry, restored, onclose }: { entry: Entry; restored: boolean; onclose: () => void } = $props();
+  let { entry, restored, last = false, onclose }: { entry: Entry; restored: boolean; last?: boolean; onclose: () => void } = $props();
   let dialog = $state<HTMLDialogElement>(), preview = $state(false), ask = $state(askFirst()), attach = $state(false), sent = $state<'' | 'busy' | 'ok' | 'fail'>('');
   const text = $derived(reportText(entry)), mail = $derived(mailtoUrl(text)), issue = $derived(githubUrl(text));
   $effect(() => { dialog?.showModal(); });
@@ -26,8 +26,8 @@
 </script>
 
 <dialog bind:this={dialog} aria-labelledby="crash-h" oncancel={(e) => { e.preventDefault(); setAsk(ask); onclose(); }}>
-  <h2 id="crash-h">{t('crashTitle')}</h2>
-  <p>{restored ? t('crashRestored') : t('crashAsk')}</p>
+  <h2 id="crash-h">{last ? t('crashTitleLast') : t('crashTitle')}</h2>
+  <p>{last ? t('crashAsk') : restored ? t('crashRestored') : t('crashAsk')}</p>
   <button class="btn" aria-expanded={preview} onclick={() => (preview = !preview)}>{preview ? t('crashHidePreview') : t('crashPreview')}</button>
   {#if preview}
     <p class="muted">{t('crashPreviewHelp')}</p>
