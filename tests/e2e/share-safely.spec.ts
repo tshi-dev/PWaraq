@@ -18,7 +18,7 @@ function risky(file: string) {
   const pg = doc.loadPage(0);
   pg.createAnnotation('Text').setContents('ask Sami about this');
   pg.destroy();
-  doc.setMetaData('info:Author', 'Abdullah');
+  doc.setMetaData('info:Author', 'Sami Writer');
   fs.writeFileSync(file, doc.saveToBuffer('').asUint8Array());
   return file;
 }
@@ -32,7 +32,7 @@ test('share safely: the check finds a fake redaction, the author and a comment; 
   const list = page.locator('.finds');
   await expect(list).toContainText('Black boxes with the text still under them: 1');
   await expect(list).toContainText('Author');
-  await expect(list).toContainText('Abdullah');
+  await expect(list).toContainText('Sami Writer');
   await expect(list).toContainText('Comments and annotations: 1');
   await clean(page, 'findings');
   await page.screenshot({ path: info.outputPath('findings-en.png') });
@@ -41,7 +41,7 @@ test('share safely: the check finds a fake redaction, the author and a comment; 
   await expect(page.locator('.state')).toHaveText('Done. The file was checked again.', { timeout: 30_000 });
   await expect(list).not.toContainText('Black boxes');
   await page.getByRole('button', { name: 'Remove details' }).click();
-  await expect(list).not.toContainText('Abdullah', { timeout: 30_000 });
+  await expect(list).not.toContainText('Sami Writer', { timeout: 30_000 });
   await page.getByRole('button', { name: 'Remove comments' }).click();
   await expect(page.locator('.clean')).toContainText('Nothing found', { timeout: 30_000 });
 
@@ -62,4 +62,25 @@ test('share safely: Arabic, the findings list follows the design rules', async (
   await expect(page.locator('.finds > li')).toHaveCount(3, { timeout: 30_000 });
   await clean(page, 'findings (ar)');
   await page.screenshot({ path: info.outputPath('findings-ar.png') });
+});
+
+test('share safely: a file opened with only its open password keeps that password after a fix', async ({ page }, info) => {
+  test.setTimeout(150_000);
+  const plain = fs.readFileSync(risky(info.outputPath('risky-pw.pdf')));
+  const locked = info.outputPath('risky-locked.pdf');
+  fs.writeFileSync(locked, m.Document.openDocument(plain, 'application/pdf').asPDF()!.saveToBuffer('encrypt=aes-256,user-password=pw,owner-password=own,permissions=-1,garbage').asUint8Array()); // no limits, so it may be changed
+  await page.goto('/');
+  await page.locator('input[type=file]').first().setInputFiles(locked);
+  await page.locator('#pdfpw').fill('pw'); // the open password, not the owner's
+  await page.locator('.lock').getByRole('button', { name: 'Open' }).click();
+  await expect(page.locator('.page').first()).toBeVisible({ timeout: 60_000 });
+  await page.getByRole('button', { name: 'Protect' }).click();
+  await page.getByRole('button', { name: 'Check this file' }).click();
+  await page.getByRole('button', { name: 'Remove comments' }).click();
+  await expect(page.locator('.state')).toHaveText('Done. The file was checked again.', { timeout: 30_000 });
+  const file = await saved(page, () => page.getByRole('button', { name: 'Save', exact: true }).first().click());
+  const d = m.Document.openDocument(file.bytes, 'application/pdf');
+  expect(d.needsPassword()).toBe(true);
+  expect(d.authenticatePassword('pw')).toBeGreaterThan(0);
+  expect(d.asPDF()!.loadPage(0).getAnnotations().length).toBe(0);
 });

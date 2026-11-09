@@ -21,7 +21,7 @@ function sample() {
   const pg = doc.loadPage(0);
   pg.createAnnotation('Text').setContents('ask Sami about this');
   pg.destroy();
-  doc.setMetaData('info:Author', 'Abdullah');
+  doc.setMetaData('info:Author', 'Sami Writer');
   return doc.saveToBuffer('').asUint8Array().slice();
 }
 
@@ -30,7 +30,7 @@ test('scan finds the fake redaction box, the author and the comment; a plain pag
   assert.deepEqual(found.map((f) => f.id), ['fake', 'meta', 'comments']);
   assert.equal(found[0].n, 1);
   assert.deepEqual(found[0].pages, [1]);
-  assert.ok(found[1].items.some(([k, v]) => k === 'author' && v === 'Abdullah'));
+  assert.ok(found[1].items.some(([k, v]) => k === 'author' && v === 'Sami Writer'));
   const plain = new m.PDFDocument(), w = pageWriter(m, plain, fonts);
   plain.insertPage(-1, w.add({ w: 595, h: 842, lines: [{ text: 'Hello', x: 72, y: 100, size: 14 }] }));
   w.finish();

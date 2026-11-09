@@ -92,9 +92,8 @@
   const mend = (f: Finding) => run(t('applying'), async () => {
     const out = await pool.tool('checkfix', { bytes: bytes.slice(), password: password ?? '', kind: f.id });
     if (f.id === 'size' && out.length >= bytes.length) { note = t('chkNoSmaller'); return; }
-    const owner = !!password && !!(await pool.tool<{ owner: boolean } | null>('guard', { bytes: bytes.slice(), current: password }))?.owner;
     after = t('chkDone');
-    await onReplace(owner ? await pool.keep(out) : out, owner ? password : undefined, 'protect');
+    await onReplace(await pool.keep(out), password, 'protect'); // like Organize: a file opened with only its open password keeps it too
   });
   onMount(() => { if (after && kind === 'protect') { const msg = after; after = ''; check().then(() => (note = msg)); } else after = ''; });
   const say = (f: Finding) => t(`chk_${f.id}` as Key).replace('{n}', f.n.toLocaleString(i18n.lang)).replace('{pages}', f.pages.slice(0, 8).join(', ') + (f.pages.length > 8 ? ' …' : ''));
