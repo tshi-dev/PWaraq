@@ -5,7 +5,7 @@
   import { onMount, tick } from 'svelte';
   import type { EnginePool } from '../lib/engine/pool';
   import { t } from '../lib/i18n.svelte';
-  import { pinch, ctrlWheel } from '../lib/touch';
+  import { pinch, ctrlWheel, autoScroll } from '../lib/touch';
   import { cached, remember } from '../lib/engine/page-cache';
 
   let { pool, sizes, current = $bindable(1) }: { pool: EnginePool; sizes: { w: number; h: number }[]; current?: number } = $props();
@@ -154,10 +154,10 @@
   // two fingers zoom the page around the middle between them (redrawn sharp when they lift); the browser's own zoom is cancelled
   let scale0 = 1, frame = 0;
   const pinched = { start: () => (scale0 = scale), change: (ratio: number, x: number, y: number) => { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => zoomTo(scale0 * ratio, x, y)); } };
-  // pan with the middle button or Space + drag
+  // pan with Space + drag (the middle button auto-scrolls, see autoScroll)
   let space = $state(false), drag: { x: number; y: number; l: number; t: number } | null = null;
   function onDown(e: PointerEvent) {
-    if (e.button !== 1 && !(e.button === 0 && space)) return;
+    if (!(e.button === 0 && space)) return;
     e.preventDefault(); scroller.setPointerCapture(e.pointerId);
     drag = { x: e.clientX, y: e.clientY, l: scroller.scrollLeft, t: scroller.scrollTop };
   }
@@ -187,7 +187,7 @@
   });
 </script>
 
-<div class="scroller" use:pinch={pinched} style:touch-action={typeof zoom === 'number' ? 'pan-x pan-y' : 'pan-y'} bind:this={scroller} use:ctrlWheel={(f, x, y) => zoomTo(scale * f, x, y)} onpointerdown={onDown} onpointermove={onMove}
+<div class="scroller" use:pinch={pinched} use:autoScroll style:touch-action={typeof zoom === 'number' ? 'pan-x pan-y' : 'pan-y'} bind:this={scroller} use:ctrlWheel={(f, x, y) => zoomTo(scale * f, x, y)} onpointerdown={onDown} onpointermove={onMove}
   onpointerup={() => (drag = null)} onscroll={() => schedule(120)} class:grab={space} role="document" aria-label={t('pages')}>
   {#each sizes as size, n}
     <div class="page" data-n={n} bind:this={pages[n].el} style:width="{px(size.w * scale)}px" style:height="{px(size.h * scale)}px"

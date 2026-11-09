@@ -6,10 +6,10 @@
   import { t } from '../lib/i18n.svelte';
   import { icon } from '../lib/icons.js';
   import { lazyPage } from '../lib/lazy';
-  import { pageZoom } from '../lib/touch';
+  import { pageZoom, autoScroll } from '../lib/touch';
 
   let { pool, sizes, bytes, onReplace }: { pool: EnginePool; sizes: { w: number; h: number }[]; bytes: Uint8Array; onReplace: (bytes: Uint8Array) => Promise<void> } = $props();
-  const W0 = 560; let W = $state(W0); const k = (i: number) => W / sizes[i].w;
+  const W0 = 560; let W = $state(W0); const widest = $derived(Math.max(...sizes.map((s) => s.w))), k = (_: number) => W / widest /* one scale for every page: W is the widest page's width */;
   let marks = $state<Mark[]>([]), kind = $state<'phone' | 'email' | 'word'>('phone'), word = $state(''), metadata = $state(false);
   let busy = $state(false), note = $state(''), error = $state(''), drag = $state<{ page: number; x: number; y: number; w: number; h: number } | null>(null);
 
@@ -56,9 +56,9 @@
 </script>
 
 <div class="redact">
-  <section class="pages" aria-label={t('pages')} use:pageZoom={{ get: () => W, set: (v) => (W = v), min: W0 / 2, max: W0 * 3 }}>
+  <section class="pages" aria-label={t('pages')} use:autoScroll use:pageZoom={{ get: () => W, set: (v) => (W = v), min: W0 / 2, max: W0 * 3 }}>
     {#each sizes as s, i}
-      <div class="sheet" style="width:{W}px;height:{s.h * k(i)}px" role="presentation" onpointerdown={(e) => down(e, i)} onpointermove={(e) => move(e, i)} onpointerup={up}>
+      <div class="sheet" style="width:{s.w * k(i)}px;height:{s.h * k(i)}px" role="presentation" onpointerdown={(e) => down(e, i)} onpointermove={(e) => move(e, i)} onpointerup={up}>
         <canvas use:lazy={[i, W]}></canvas>
         {#each marks as m, n}
           {#if m.page === i}<button class="mark" style="left:{m.x * k(i)}px;top:{m.y * k(i)}px;width:{m.w * k(i)}px;height:{m.h * k(i)}px" title={t('removeMark')} aria-label={t('removeMark')}

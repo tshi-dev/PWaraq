@@ -3,6 +3,7 @@
   import { onMount } from 'svelte';
   import type { EnginePool } from '../lib/engine/pool';
   import { t } from '../lib/i18n.svelte';
+  import { autoScroll } from '../lib/touch';
 
   let { pool, sizes, current, onGo }: { pool: EnginePool; sizes: { w: number; h: number }[]; current: number; onGo: (n: number) => void } = $props();
   const WIDTH = 120;
@@ -31,7 +32,7 @@
   });
 </script>
 
-<nav class="thumbs" bind:this={list} aria-label={t('thumbnails')}>
+<nav class="thumbs" use:autoScroll bind:this={list} aria-label={t('thumbnails')}>
   {#each sizes as size, n}
     <button class="thumb" class:on={n === current - 1} data-n={n} onclick={() => onGo(n + 1)} aria-label="{t('page')} {n + 1}"
       aria-current={n === current - 1 ? 'page' : undefined}>

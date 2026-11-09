@@ -14,7 +14,7 @@
   import { buildCms, covered, fromPdfDate, hex, parseCert, pdfDate, timestamp as tsaToken, verifyCms, type Check, type SigEntry } from '../lib/engine/pades';
   import type { Prepared, SigPlan } from '../lib/engine/signcert';
   import { cat } from '../lib/engine/der';
-  import { pageZoom } from '../lib/touch';
+  import { pageZoom, autoScroll } from '../lib/touch';
   import { createId, importId, listIds, removeId, unlockId, type DigitalId, type Unlocked } from '../lib/ids';
 
   let { pool, first, onDone }: { pool: EnginePool; first: { name: string; bytes: Uint8Array; sizes: { w: number; h: number }[] };
@@ -325,7 +325,7 @@
   </div>
 
   <div class="body">
-    <div class="stage" bind:clientWidth={sw} bind:clientHeight={sh} use:pageZoom={{ get: () => zoomF, set: (v) => (zoomF = v), min: 0.5, max: 3 }}>
+    <div class="stage" bind:clientWidth={sw} bind:clientHeight={sh} use:autoScroll use:pageZoom={{ get: () => zoomF, set: (v) => (zoomF = v), min: 0.5, max: 3 }}>
       {#if busy}<p class="busy" role="status">{busy}</p>{/if}
       {#if s}
         <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions (the page itself: a click signs there; Enter and the panel work from the keyboard) -->

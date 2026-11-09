@@ -16,7 +16,7 @@
   import { isDesktop, readPath } from '../lib/desktop';
   import { WINDOWS_FONTS } from '../lib/engine/fontstore';
   import { uid } from '../lib/pages';
-  import { ctrlWheel } from '../lib/touch';
+  import { ctrlWheel, autoScroll } from '../lib/touch';
 
   let { pool, base, label, onSave, onCancel }: { pool: EnginePool; base: Item; label: string; onSave: (r: Saved) => void | Promise<void>; onCancel: () => void } = $props();
 
@@ -365,7 +365,7 @@
   </div>
 
   <div class="body">
-    <div class="stage" bind:clientWidth={sw} bind:clientHeight={sh} use:ctrlWheel={wheelZoom}>
+    <div class="stage" bind:clientWidth={sw} bind:clientHeight={sh} use:ctrlWheel={wheelZoom} use:autoScroll>
       {#if busy}<p class="busy" role="status">{busy}</p>{/if}
       {#if s}
         <!-- svelte-ignore a11y_no_static_element_interactions (the page itself: a click places text or lets go of the selection) -->
