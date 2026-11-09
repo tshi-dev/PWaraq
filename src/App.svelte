@@ -11,7 +11,7 @@
   import { unzip } from './lib/zip';
   import { saveDraft, listDrafts, readDraft, dropDraft, EVERY, type Draft } from './lib/drafts';
   import { startSession, endSession } from './lib/session';
-  import { uid, isImage, addFiles, toItems } from './lib/pages';
+  import { uid, isImage, mimeOf } from './lib/pages';
   import Notice from './components/Notice.svelte';
   import IosHint from './components/IosHint.svelte';
   import CrashReport from './components/CrashReport.svelte';
@@ -214,14 +214,17 @@
     if (rest.length) want ??= 'organize';
     openFile(first.file, first.handle, first.path);
   }
+  // the photos go to one engine only (not a copy in each); the document that was open stays until the new one is ready
   async function openImages(files: File[]) {
-    busy = true; error = ''; openedPath = undefined;
+    busy = true; error = '';
     try {
-      await pool.reset();
-      const items = (await addFiles(pool, files)).flatMap((a) => a.items);
-      want = 'organize'; extra = [];
-      await show(await pool.build({ items: toItems(items) }), files[0].name.replace(/\.[^.]+$/, '') + '.pdf', true); // not in Recent until saved, like a new portfolio
-    } catch { error = t('notReadable'); }
+      const pdf = await pool.tool<Uint8Array>('images', { files: await Promise.all(files.map(async (f) => ({ bytes: new Uint8Array(await f.arrayBuffer()), mime: mimeOf(f) }))) });
+      openedPath = undefined; want = 'organize'; extra = [];
+      await show(pdf, files[0].name.replace(/\.[^.]+$/, '') + '.pdf', true); // not in Recent until saved, like a new portfolio
+    } catch (e) {
+      want = undefined; error = why(e, 'notReadable');
+      if (doc) { openedPath = doc.path; await setDocument(doc.bytes); await pool.open(doc.bytes, doc.password).catch(() => {}); } // show() may have let it go
+    }
     busy = false;
   }
   const plain = () => { want = undefined; return pick(true); };

@@ -1,7 +1,7 @@
 // One MuPDF engine in a background thread. Pages are read once into display lists (kept, least recently used
 // first out), so drawing again at another zoom or drawing a zoom tile does not re-read the PDF.
 import type * as MuPDF from '../../../engine/mupdf-wasm/dist/mupdf.js';
-import { assemble } from './assemble';
+import { assemble, imagesPdf } from './assemble';
 import { compress, protect, unlock, guardOf, sealLikeSource, decrypt } from './tools';
 import { editPage, pageObjects, pictureOf, type Edit, type Own } from './editpage';
 import { findSpots, signPdf } from './sign';
@@ -151,6 +151,8 @@ const ops: Record<string, (r: Req) => any> = {
     if (r.build.watermark || r.build.numberStyle?.digits === 'arab' || r.build.items.some((it: any) => it.divider || it.toc || it.cover || (it.blank && it.paper))) await loadFonts();
     return assemble(mupdf, source, r.build, () => fonts!);
   },
+  // photos (bytes, mime) as a new PDF, without opening them as sources
+  images(r) { return imagesPdf(mupdf, r.files); },
   // whole-file tools (Convert, Protect)
   compress(r) { return compress(mupdf, r.bytes, r.level, r.current); },
   protect(r) { return protect(mupdf, r.bytes, r.password, r.print, r.copy, r.current); },

@@ -131,7 +131,7 @@ export class EnginePool {
   }
 
   /** A whole-file tool (compress, protect, unlock) on `bytes`, in whichever worker is free. */
-  tool<T = Uint8Array>(op: 'compress' | 'protect' | 'unlock' | 'guard' | 'seal' | 'redact' | 'formfields' | 'fillform' | 'ocrlayer' | 'annotlist' | 'annotapply' | 'checkscan' | 'checkfix' | 'verify' | 'repair', args: Record<string, any>) { return this.run<T>({ op, priority: 0, args, any: true }); }
+  tool<T = Uint8Array>(op: 'compress' | 'protect' | 'unlock' | 'guard' | 'seal' | 'redact' | 'formfields' | 'fillform' | 'ocrlayer' | 'annotlist' | 'annotapply' | 'checkscan' | 'checkfix' | 'verify' | 'repair' | 'images', args: Record<string, any>) { return this.run<T>({ op, priority: 0, args, any: true }); }
 
   /** The password the open document was opened with ('' when none). */
   get password() { return this.sources.get(0)?.password ?? ''; }
