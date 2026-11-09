@@ -352,9 +352,9 @@
     {#if scope !== undefined}<ScopeTabs bind:scope /><span class="sep"></span>{/if}
     <button class="btn" class:on={tool === 'select'} aria-pressed={tool === 'select'} onclick={() => (tool = 'select')}>{@html icon('move')}{t('selectTool')}</button>
     <button class="btn" class:on={tool === 'text'} aria-pressed={tool === 'text'} onclick={() => { tool = 'text'; select(null); }} disabled={doc < 0}>{@html icon('text')}{t('addText')}</button>
-    <button class="btn" onclick={() => choosePhoto(false)} disabled={doc < 0}>{@html icon('images')}{t('addPhoto')}</button>
-    <button class="btn" class:on={tool === 'redact'} aria-pressed={tool === 'redact'} onclick={() => { tool = 'redact'; select(null); }} disabled={doc < 0}>{@html icon('redact')}{t('redactArea')}</button>
-    <button class="btn" class:on={tool === 'move'} aria-pressed={tool === 'move'} onclick={() => { tool = 'move'; select(null); }} disabled={doc < 0}>{@html icon('select')}{t('moveArea')}</button>
+    <button class="btn" onclick={() => choosePhoto(false)} disabled={doc < 0} title={t('addPhoto')}>{@html icon('images')}<span class="lbl">{t('addPhoto')}</span></button>
+    <button class="btn" class:on={tool === 'redact'} aria-pressed={tool === 'redact'} onclick={() => { tool = 'redact'; select(null); }} disabled={doc < 0} title={t('redactArea')}>{@html icon('redact')}<span class="lbl">{t('redactArea')}</span></button>
+    <button class="btn" class:on={tool === 'move'} aria-pressed={tool === 'move'} onclick={() => { tool = 'move'; select(null); }} disabled={doc < 0} title={t('moveArea')}>{@html icon('select')}<span class="lbl">{t('moveArea')}</span></button>
     <span class="sep"></span>
     <button class="btn icon" onclick={undo} disabled={!canUndo} title={t('undo')} aria-label={t('undo')}>{@html icon('undo')}</button>
     <button class="btn icon" onclick={redo} disabled={!canRedo} title={t('redo')} aria-label={t('redo')}><span class="flip">{@html icon('undo')}</span></button>
@@ -518,6 +518,8 @@
 
 <style>
   .editor { height: 100%; display: grid; grid-template-rows: auto 1fr; min-height: 0; }
+  /* below 1500 px the secondary tools show their icon only (tooltip + aria name kept), so Save page stays on the one row */
+  @media (max-width: 1500px) and (min-width: 821px) { .tools .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } }
   .tools { display: flex; align-items: center; gap: var(--s-8); padding: var(--s-8) var(--s-16); background: var(--surface); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
   .sep { width: 1px; height: 24px; background: var(--line); }
   .flip { display: grid; transform: scaleX(-1); }
