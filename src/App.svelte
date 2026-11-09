@@ -53,7 +53,7 @@
   // recovery: engine health, drafts of unsaved work, the last closed document
   let health = $state<Health | null>(null), notice = $state(''), drafts = $state<Draft[]>([]), closed = $state<{ name: string; bytes: Uint8Array; modified: boolean; path?: string } | null>(null);
   let restoredWork = $state(false); // the person chose Restore: only then "your work was restored" is true
-  let report = $state<Entry[]>([]), crashes = $state(0), copied = $state(false);
+  let report = $state<Entry[]>([]), crashes = $state(0), copied = $state(false), quietExit = $state(false);
   async function copyReport() { if (await crash.copyReport()) { copied = true; setTimeout(() => (copied = false), 3000); } }
   let draftId = uid(), kept: Uint8Array | null = null, closeTimer: ReturnType<typeof setTimeout>;
   pool.onHealth = (h) => {
@@ -81,8 +81,13 @@
     refresh();
     startSession().then(async (unclean) => {
       if (unclean) { drafts = (await listDrafts()).slice(0, 1); await crash.record('unclean', 'The previous run ended without a clean exit', undefined, previous); }
-      const unseen = (await crash.entries()).filter((e) => !e.seen && (e.kind === 'panic' || e.kind === 'unclean'));
-      if (unseen.length && crash.askFirst()) report = unseen; else crash.markSeen(unseen);
+      // an unclean exit alone (a closed browser, a discarded tab, a power cut) is only noted on the start screen; with an
+      // error logged in that run, or a Rust panic, it is a crash and the dialog asks
+      const fresh = (await crash.entries()).filter((e) => !e.seen), exits = fresh.filter((e) => e.kind === 'unclean');
+      const loud = [...fresh.filter((e) => e.kind === 'panic'), ...(exits.length ? [...fresh.filter((e) => e.kind === 'error' || e.kind === 'rejection' || e.kind === 'worker'), ...exits] : [])];
+      if (loud.length && crash.askFirst()) report = loud; else crash.markSeen(loud);
+      crash.markSeen(fresh.filter((e) => !loud.includes(e))); // errors of runs that ended well are not brought up later
+      quietExit = exits.length > 0 && !loud.length;
       crashes = (await crash.entries()).length;
     });
     const every = setInterval(keepDraft, EVERY);
@@ -358,6 +363,7 @@
       </div>
     {/if}
     <p class="crashrow">
+      {#if quietExit && !drafts.length}<span class="muted small" role="status">{t('closedQuietly')}</span>{/if}
       <button class="btn" onclick={reportProblem}>{t('reportProblem')}</button>
       {#if crashes}
         <button class="btn" onclick={copyReport}>{copied ? t('crashCopied') : t('copyCrash')}</button>
