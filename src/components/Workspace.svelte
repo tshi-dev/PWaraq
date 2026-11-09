@@ -23,7 +23,7 @@
   import MoreMenu from './MoreMenu.svelte';
 
   let { pool, sizes, name, bytes, modified, password, task, extra, onOpen, onClose, onSave, onSaveAs, onReplace }: { pool: EnginePool; sizes: { w: number; h: number }[]; name: string; bytes: Uint8Array; modified: boolean; password?: string; task?: Key; extra?: File[];
-    onOpen: () => void; onClose: () => void; onSave: () => void; onSaveAs: () => void; onReplace: (bytes: Uint8Array, password?: string) => Promise<void> } = $props();
+    onOpen: () => void; onClose: () => void; onSave: () => void; onSaveAs: () => void; onReplace: (bytes: Uint8Array, password?: string, task?: Key) => Promise<void> } = $props();
   // svelte-ignore state_referenced_locally (a start-screen tile picks the first task; a new document is a new workspace)
   let mode = $state<'view' | 'organize' | 'edit' | 'sign' | 'convert' | 'protect' | 'redact' | 'forms' | 'ocr' | 'comment'>((task as 'view' | undefined) ?? 'view'), editScope = $state<'page' | 'document'>('page'), organize = $state<Organize>(), organized = $state(false), comment = $state<Comment>(), commented = $state(false), applying = $state(false);
   // leaving Organize applies its changes: the document is rebuilt and opened again in View

@@ -8,6 +8,7 @@ import { findSpots, signPdf } from './sign';
 import { listSignatures, prepareSignature } from './signcert';
 import { findMatches, redact } from './redact';
 import { fillForm, listFields } from './forms';
+import { scan as checkScan, fix as checkFix } from './checkshare';
 import { addTextLayer } from './ocr';
 import { applyAnnots, listAnnots } from './annots';
 import type { Fonts } from './textpage';
@@ -160,6 +161,9 @@ const ops: Record<string, (r: Req) => any> = {
   // redaction: boxes of phone numbers / e-mails / a word on a page, and the file with the marked areas removed
   redactfind(r) { const p = source(r.doc).doc.loadPage(r.page); try { return findMatches(p, r.kind, r.query); } finally { p.destroy(); } },
   redact(r) { return redact(mupdf, r.bytes, r.marks, { metadata: r.metadata }); },
+  // check before sharing: what the file gives away, and the file with one kind removed (both on the decrypted file)
+  checkscan(r) { return checkScan(mupdf, r.password ? decrypt(mupdf, r.bytes, r.password) : r.bytes); },
+  checkfix(r) { return checkFix(mupdf, r.password ? decrypt(mupdf, r.bytes, r.password) : r.bytes, r.kind); },
   // forms: the fields of the file in `bytes`, and the file with the answers written into them
   formfields(r) { return listFields(mupdf, r.bytes); },
   async fillform(r) { await loadFonts(); return fillForm(mupdf, r.bytes, r.answers, r.flatten, fonts!); },

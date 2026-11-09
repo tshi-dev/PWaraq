@@ -1,10 +1,17 @@
+<script lang="ts" module>
+  // set before a fix reloads the document (the workspace is built again): the new workspace checks the file again and says so
+  let after = '';
+</script>
+
 <script lang="ts">
   // Whole-document tools, one screen per task: page numbers and watermark (Edit → Whole document), pages
   // as images (Convert), password protect and unlock (Protect). A preview of page 1 on the left, options on the right.
   // Changes to the document itself go to `onReplace` (then Save as usual); copies (smaller, protected, images) are saved
   // as new files and the open document stays as it is.
   import type { EnginePool } from '../lib/engine/pool';
-  import { i18n, t } from '../lib/i18n.svelte';
+  import { onMount } from 'svelte';
+  import type { Finding } from '../lib/engine/checkshare';
+  import { i18n, t, type Key } from '../lib/i18n.svelte';
   import { icon } from '../lib/icons.js';
   import { saveFile } from '../lib/store';
   import { CONVERTIBLE_ACCEPT, desktop, toPdf } from '../lib/convert';
@@ -12,7 +19,7 @@
   import { addUnique } from '../lib/names';
 
   let { pool, kind, sizes, name, bytes, password, onReplace }: { pool: EnginePool; kind: 'stamp' | 'convert' | 'protect';
-    sizes: { w: number; h: number }[]; name: string; bytes: Uint8Array; password?: string; onReplace: (bytes: Uint8Array) => Promise<void> } = $props();
+    sizes: { w: number; h: number }[]; name: string; bytes: Uint8Array; password?: string; onReplace: (bytes: Uint8Array, password?: string, task?: 'protect') => Promise<void> } = $props();
   const base = $derived(name.replace(/\.pdf$/i, ''));
   let busy = $state(''), note = $state(''), error = $state('');
   async function run(label: string, job: () => Promise<void>) {
@@ -77,6 +84,21 @@
   $effect(() => { pool.tool<typeof held>('guard', { bytes: bytes.slice(), current: password ?? '' }).then((g) => (held = g)).catch(() => {}); });
   const limited = $derived(!!held?.restricted && !held.owner);
   const copyAs = () => run(t('applying'), async () => { await saveFile(bytes, `${base} (${t('copyWord')}).pdf`); });
+
+  // Check before sharing (Protect): the scan runs in the engine; each fix replaces the open document (Save as usual, protection kept like Organize does)
+  let report = $state<Finding[] | null>(null);
+  const issues = $derived((report ?? []).filter((f) => f.id !== 'ocr'));
+  const check = () => run(t('chkChecking'), async () => { report = await pool.tool<Finding[]>('checkscan', { bytes: bytes.slice(), password: password ?? '' }); });
+  const mend = (f: Finding) => run(t('applying'), async () => {
+    const out = await pool.tool('checkfix', { bytes: bytes.slice(), password: password ?? '', kind: f.id });
+    if (f.id === 'size' && out.length >= bytes.length) { note = t('chkNoSmaller'); return; }
+    const owner = !!password && !!(await pool.tool<{ owner: boolean } | null>('guard', { bytes: bytes.slice(), current: password }))?.owner;
+    after = t('chkDone');
+    await onReplace(owner ? await pool.keep(out) : out, owner ? password : undefined, 'protect');
+  });
+  onMount(() => { if (after && kind === 'protect') { const msg = after; after = ''; check().then(() => (note = msg)); } else after = ''; });
+  const say = (f: Finding) => t(`chk_${f.id}` as Key).replace('{n}', f.n.toLocaleString(i18n.lang)).replace('{pages}', f.pages.slice(0, 8).join(', ') + (f.pages.length > 8 ? ' …' : ''));
+  const shown = (v: string) => v.replace(/^D:(\d{4})(\d\d)(\d\d).*$/, '$1-$2-$3');
   const free = () => run(t('applying'), async () => { await onReplace(await pool.tool('unlock', { bytes: bytes.slice(), password: password ?? '' })); });
 </script>
 
@@ -133,6 +155,22 @@
       <label class="btn" class:disabled={!canOffice || !!busy}>{@html icon('upload')}{t('officeChoose')}
         <input type="file" accept={CONVERTIBLE_ACCEPT} hidden disabled={!canOffice || !!busy} onchange={office} /></label>
     {:else}
+      <h2>{t('chkTitle')}</h2>
+      <p class="help">{t('chkHelp')}</p>
+      <button class="btn" onclick={check} disabled={!!busy}>{@html icon('search')}{t('chkRun')}</button>
+      {#if report}
+        {#if !issues.length}<p class="clean" role="status">{@html icon('check')}{t('chkClean')}</p>{/if}
+        <ul class="finds" aria-label={t('chkTitle')}>
+          {#each report as f (f.id)}
+            <li class:fine={f.id === 'ocr'}>
+              <p>{say(f)}</p>
+              {#if f.items.length}<ul class="items">{#each f.items as [k, v]}<li><span>{t(`chk_m_${k}` as Key)}</span>{#if v}<bdi>{shown(v)}</bdi>{/if}</li>{/each}</ul>{/if}
+              {#if f.fix && !limited}<button class="btn" onclick={() => mend(f)} disabled={!!busy}>{t(`chk_${f.id}_fix` as Key)}</button>{/if}
+            </li>
+          {/each}
+        </ul>
+        {#if limited && issues.some((f) => f.fix)}<p class="help">{t('chkLimited')}</p>{/if}
+      {/if}
       {#if limited}
       <h2>{t('limitedTitle')}</h2>
       <p class="help">{t('limitedHelp')}</p>
@@ -181,6 +219,14 @@
   .switch, .choice { display: flex; align-items: center; gap: var(--s-8); min-height: var(--control); font-weight: 600; }
   .switch input { flex: none; width: 20px; height: 20px; accent-color: var(--green); }
   .grow { flex: 1; }
+  .clean { display: flex; gap: var(--s-8); align-items: flex-start; margin: 0; color: var(--green); font-weight: 600; }
+  .finds, .items { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--s-8); }
+  .finds > li { display: grid; gap: var(--s-8); justify-items: start; padding: var(--s-12); border: 1px solid var(--line); border-radius: var(--r-8); background: var(--paper); }
+  .finds p { margin: 0; }
+  .finds .fine { background: var(--green-soft); }
+  .items { gap: var(--s-4); font-size: var(--fs-12); color: var(--muted); }
+  .items span::after { content: ': '; }
+  .items bdi { color: var(--ink); }
   label.btn { cursor: pointer; } label.btn.disabled { opacity: 0.5; cursor: not-allowed; }
   .state { margin: 0; color: var(--muted); font-size: var(--fs-12); min-height: 18px; }
   .error { margin: 0; color: var(--danger); }
