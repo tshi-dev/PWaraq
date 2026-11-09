@@ -5,7 +5,7 @@ const strings = {
   open: ['Open a PDF', 'افتح ملف PDF'],
   openShort: ['Open', 'فتح'],
   close: ['Close', 'إغلاق'],
-  dropHere: ['or drop a PDF or .waraq file here', 'أو أفلت ملف PDF أو ملف ‎.waraq‎ هنا'],
+  dropHere: ['or drop PDF, .waraq or image files here', 'أو أفلت ملفات PDF أو ‎.waraq‎ أو صور هنا'],
   privacy: ['Your files never leave this device.', 'ملفاتك لا تغادر هذا الجهاز.'],
   language: ['عربي', 'English'],
   theme: ['Theme', 'المظهر'],

@@ -5,6 +5,7 @@ export type GridItem = { id: string; doc: number; page: number; rotate: number; 
 export type Group = { id: string; items: GridItem[]; hidden?: boolean; locked?: boolean }; // hidden: pages not shown; locked: not changeable
 import type { Item } from './engine/assemble';
 
+export const isImage = (name: string) => /\.(png|jpe?g)$/i.test(name);
 export const uid = () => Math.random().toString(36).slice(2, 10);
 export const turned = (it: { rotate: number }) => ((it.rotate % 360) + 360) % 360;
 /** Size as seen: width and height swap when turned a quarter. */
@@ -38,8 +39,9 @@ export function toItems(items: GridItem[]): Item[] {
 export async function addFiles(pool: import('./engine/pool').EnginePool, files: File[]): Promise<{ file: File; doc: number; bytes: Uint8Array; items: GridItem[] }[]> {
   const out = [];
   for (const file of files) {
-    const image = /^image\/(png|jpeg|gif|bmp|tiff|webp)$/.test(file.type), bytes = new Uint8Array(await file.arrayBuffer());
-    const { id, sizes } = await pool.add(bytes, image ? file.type : 'application/pdf');
+    const mime = file.type || (/\.png$/i.test(file.name) ? 'image/png' : /\.jpe?g$/i.test(file.name) ? 'image/jpeg' : ''); // a dropped file can come without a type
+    const image = /^image\/(png|jpeg|gif|bmp|tiff|webp)$/.test(mime), bytes = new Uint8Array(await file.arrayBuffer());
+    const { id, sizes } = await pool.add(bytes, image ? mime : 'application/pdf');
     out.push({ file, doc: id, bytes, items: sizes.map((s, page) => ({ id: uid(), doc: id, page, rotate: 0, w: s.w, h: s.h, image })) });
   }
   return out;

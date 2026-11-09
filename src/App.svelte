@@ -11,7 +11,7 @@
   import { unzip } from './lib/zip';
   import { saveDraft, listDrafts, readDraft, dropDraft, EVERY, type Draft } from './lib/drafts';
   import { startSession } from './lib/session';
-  import { uid } from './lib/pages';
+  import { uid, isImage, addFiles, toItems } from './lib/pages';
   import Notice from './components/Notice.svelte';
   import IosHint from './components/IosHint.svelte';
   import CrashReport from './components/CrashReport.svelte';
@@ -191,16 +191,35 @@
 
   async function pick(multiple = false) {
     picker.multiple = multiple;
-    const [first, ...rest] = await pickFiles({ multiple, accept: { 'application/pdf': ['.pdf'], 'application/zip': ['.waraq'], 'application/octet-stream': CONVERTIBLE_ACCEPT.split(',') }, fallback: () => picker.click() });
-    if (first) { extra = rest.map((r) => r.file); openFile(first.file, first.handle, first.path); }
+    const picked = await pickFiles({ multiple, accept: { 'application/pdf': ['.pdf'], 'image/*': ['.png', '.jpg', '.jpeg'], 'application/zip': ['.waraq'], 'application/octet-stream': CONVERTIBLE_ACCEPT.split(',') }, fallback: () => picker.click() });
+    openMany(picked);
   }
-  const plain = () => { want = undefined; return pick(); };
+  // Several files (or photos) chosen together are combined in Organize; photos first become one new, unsaved PDF.
+  function openMany(list: { file: File; handle?: FileSystemFileHandle; path?: string }[]) {
+    const [first, ...rest] = list;
+    if (!first) return;
+    if (isImage(first.file.name)) return openImages(list.map((l) => l.file));
+    extra = rest.map((r) => r.file);
+    if (rest.length) want ??= 'organize';
+    openFile(first.file, first.handle, first.path);
+  }
+  async function openImages(files: File[]) {
+    busy = true; error = ''; openedPath = undefined;
+    try {
+      await pool.reset();
+      const items = (await addFiles(pool, files)).flatMap((a) => a.items);
+      want = 'organize'; extra = [];
+      await show(await pool.build({ items: toItems(items) }), files[0].name.replace(/\.[^.]+$/, '') + '.pdf', true); // not in Recent until saved, like a new portfolio
+    } catch { error = t('notReadable'); }
+    busy = false;
+  }
+  const plain = () => { want = undefined; return pick(true); };
   const tile = (task: Key | 'portfolio') => { if (task === 'portfolio') return startPortfolio(); want = task; return pick(task === 'organize'); };
   async function drop(e: DragEvent) {
     e.preventDefault(); over = false; want = undefined; extra = [];
-    const file = e.dataTransfer?.files[0], item = e.dataTransfer?.items[0];
+    const files = [...(e.dataTransfer?.files ?? [])], item = e.dataTransfer?.items[0];
     const handle = await (item as any)?.getAsFileSystemHandle?.().catch(() => null);
-    openFile(file, handle?.kind === 'file' ? handle : undefined);
+    openMany(files.map((file, i) => ({ file, handle: i === 0 && handle?.kind === 'file' ? handle : undefined })));
   }
   async function close() {
     if (doc) { // kept for 10 minutes: "Undo close" on the start screen
@@ -241,7 +260,7 @@
 {/if}
 <Notice message={notice} slow={health?.kind === 'slow'} oncancel={() => pool.cancelAll()} />
 {#if isDesktop}<TitleBar flush={!!(doc || portfolio)} float={!!(doc || portfolio)} /><PackPrompt />{/if}
-<input bind:this={picker} type="file" accept="application/pdf,.pdf,.waraq,{CONVERTIBLE_ACCEPT}" hidden onchange={(e) => { const [f, ...rest] = Array.from(e.currentTarget.files ?? []); extra = rest; openFile(f); e.currentTarget.value = ''; }} />
+<input bind:this={picker} type="file" accept="application/pdf,.pdf,.waraq,.png,.jpg,.jpeg,{CONVERTIBLE_ACCEPT}" hidden onchange={(e) => { openMany(Array.from(e.currentTarget.files ?? []).map((file) => ({ file }))); e.currentTarget.value = ''; }} />
 
 {#if doc}
   <Workspace {pool} sizes={doc.sizes} name={doc.name} bytes={doc.bytes} modified={doc.modified} password={doc.password} task={doc.task} extra={doc.extra} onOpen={plain} onClose={close} onSave={() => save()} onSaveAs={() => save(true)}
