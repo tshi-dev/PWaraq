@@ -56,15 +56,24 @@ export function autoScroll(node: HTMLElement) {
     cancelAnimationFrame(raf); raf = 0; mark?.remove(); mark = null; held = false;
     node.style.cursor = ''; removeEventListener('pointermove', move, true); removeEventListener('pointerdown', click, true); removeEventListener('keydown', key, true);
   };
+  // the click that ends scroll mode must not also act (place a signature box, jump to a page): swallow its `click`, and drop the trap if none comes
+  let trap: ((e: Event) => void) | null = null, trapTimer = 0;
+  const untrap = () => { if (trap) removeEventListener('click', trap, true); trap = null; clearTimeout(trapTimer); };
+  const eat = () => {
+    untrap();
+    trap = (e) => { e.preventDefault(); e.stopPropagation(); untrap(); };
+    addEventListener('click', trap, true); trapTimer = window.setTimeout(untrap, 600);
+  };
   const tick = (now: number) => {
     const d = y - oy, v = Math.abs(d) < 10 ? 0 : (d - Math.sign(d) * 10) * 0.12 * Math.min(2, (now - last) / 16.7); // px per frame, 60 fps
     last = now; node.scrollTop += v; raf = requestAnimationFrame(tick);
   };
   const move = (e: PointerEvent) => { y = e.clientY; if (Math.abs(y - oy) > 6) moved = true; };
-  const click = (e: Event) => { if (!held) { e.preventDefault(); e.stopPropagation(); stop(); } };
+  const click = (e: Event) => { if (!held) { e.preventDefault(); e.stopPropagation(); if ((e as PointerEvent).button === 0) eat(); stop(); } };
   const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); stop(); } };
   const down = (e: PointerEvent) => {
     if (e.button !== 1) return;
+    if (!raf && (e.target as Element | null)?.closest?.('input, textarea, [contenteditable], a[href]')) return;
     e.preventDefault(); e.stopPropagation();
     if (raf) { stop(); return; }
     oy = y = e.clientY; t0 = performance.now(); held = true; moved = false; last = t0;
@@ -79,5 +88,5 @@ export function autoScroll(node: HTMLElement) {
   const swallow = (e: MouseEvent) => { if (e.button === 1) e.preventDefault(); }; // mousedown/auxclick: no link opening, paste or OS autoscroll
   node.addEventListener('pointerdown', down); addEventListener('pointerup', up, true);
   node.addEventListener('mousedown', swallow); node.addEventListener('auxclick', swallow);
-  return { destroy() { stop(); node.removeEventListener('pointerdown', down); removeEventListener('pointerup', up, true); node.removeEventListener('mousedown', swallow); node.removeEventListener('auxclick', swallow); } };
+  return { destroy() { stop(); untrap(); node.removeEventListener('pointerdown', down); removeEventListener('pointerup', up, true); node.removeEventListener('mousedown', swallow); node.removeEventListener('auxclick', swallow); } };
 }

@@ -47,3 +47,17 @@ test('each fix removes its finding and leaves the others', () => {
   assert.deepEqual(ids(fix(m, src, 'comments')), ['fake', 'meta']);
   assert.equal(open(fix(m, src, 'meta')).getMetaData('info:Author') ?? '', '');
 });
+
+test('an unchecked checkbox (/V /Off) is not a typed answer; a checked one is', () => {
+  const make = (v) => {
+    const d = new m.PDFDocument();
+    d.insertPage(-1, d.addPage([0, 0, 200, 200], 0, {}, ''));
+    const page = d.findPage(0), w = d.addObject(d.newDictionary()), annots = d.newArray(), fields = d.newArray(), af = d.newDictionary();
+    w.put('Type', d.newName('Annot')); w.put('Subtype', d.newName('Widget')); w.put('F', 4); w.put('P', page); w.put('Rect', [20, 20, 40, 40]);
+    w.put('T', d.newString('agree')); w.put('FT', d.newName('Btn')); w.put('V', d.newName(v)); w.put('AS', d.newName(v));
+    annots.push(w); fields.push(w); page.put('Annots', annots); af.put('Fields', fields); d.getTrailer().get('Root').put('AcroForm', af);
+    return d.saveToBuffer('').asUint8Array().slice();
+  };
+  assert.ok(!ids(make('Off')).includes('forms'));
+  assert.ok(ids(make('Yes')).includes('forms'));
+});

@@ -93,10 +93,12 @@
     const out = await pool.tool('checkfix', { bytes: bytes.slice(), password: password ?? '', kind: f.id });
     if (f.id === 'size' && out.length >= bytes.length) { note = t('chkNoSmaller'); return; }
     after = t('chkDone');
-    await onReplace(await pool.keep(out), password, 'protect'); // like Organize: a file opened with only its open password keeps it too
+    try { await onReplace(await pool.keep(out), password, 'protect'); } // like Organize: a file opened with only its open password keeps it too
+    catch (e) { after = ''; throw e; }
   });
   onMount(() => { if (after && kind === 'protect') { const msg = after; after = ''; check().then(() => (note = msg)); } else after = ''; });
-  const say = (f: Finding) => t(`chk_${f.id}` as Key).replace('{n}', f.n.toLocaleString(i18n.lang)).replace('{pages}', f.pages.slice(0, 8).join(', ') + (f.pages.length > 8 ? ' …' : ''));
+  const where = (f: Finding) => { const ps = [...new Set(f.pages)]; return t(ps.length === 1 ? 'onPageOne' : 'onPageMany').replace('{pages}', ps.slice(0, 8).join(i18n.lang === 'ar' ? '، ' : ', ') + (ps.length > 8 ? ' …' : '')); };
+  const say = (f: Finding) => t(`chk_${f.id}` as Key).replace('{n}', f.n.toLocaleString(i18n.lang)).replace('{where}', where(f));
   const shown = (v: string) => v.replace(/^D:(\d{4})(\d\d)(\d\d).*$/, '$1-$2-$3');
   const free = () => run(t('applying'), async () => { await onReplace(await pool.tool('unlock', { bytes: bytes.slice(), password: password ?? '' })); });
 </script>
@@ -111,7 +113,7 @@
         {#if numbersOn}<span class="pno num {position}">{label}</span>{/if}
       {/if}
     </div>
-    <p class="muted num">{sizes.length} {t('pagesCount')} · {mb(bytes.length)}</p>
+    <p class="muted num">{t(sizes.length === 1 ? 'docInfoOne' : 'docInfoMany').replace('{n}', String(sizes.length)).replace('{size}', mb(bytes.length))}</p>
   </section>
 
   <aside class="side">

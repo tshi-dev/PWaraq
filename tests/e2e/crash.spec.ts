@@ -152,6 +152,7 @@ test('the log keeps 20 entries', async ({ page }) => {
 
 for (const [lang, theme] of COMBOS) test(`design rules hold on the crash dialog and the restore offer (${lang}, ${theme})`, async ({ page }, info) => {
   test.setTimeout(90_000);
+  test.skip(!!process.env.PREVIEW, 'imports the source module');
   await page.addInitScript(([l, th]) => { localStorage.setItem('waraq-lang', l); localStorage.setItem('waraq-theme', th); }, [lang, theme]);
   await page.addInitScript(DEAD);
   await page.goto('/');

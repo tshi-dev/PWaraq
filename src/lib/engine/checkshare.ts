@@ -105,7 +105,7 @@ export function scan(m: typeof MuPDF, bytes: Uint8Array): Finding[] {
         else if (!SKIP.has(type)) notes.push(i + 1);
         if (type !== 'Widget' && type !== 'Popup' && hasScript(a.getObject())) scripts.push(i + 1);
       }
-      for (const w of p.getWidgets()) { if ((w.getValue() ?? '').trim()) forms.push(i + 1); if (hasScript(w.getObject())) scripts.push(i + 1); }
+      for (const w of p.getWidgets()) { if (!['', 'Off'].includes((w.getValue() ?? '').trim())) forms.push(i + 1); if (hasScript(w.getObject())) scripts.push(i + 1); }
       if (p.getObject().get('AA').isDictionary()) scripts.push(i + 1);
     });
     add('comments', notes.length, notes); add('forms', forms.length, forms);
