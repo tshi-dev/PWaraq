@@ -124,12 +124,12 @@
   }
   // a password-protected PDF: asked for on the start screen, then opened with it
   let locked = $state<{ bytes: Uint8Array; name: string; size: number; handle?: FileSystemFileHandle; path?: string } | null>(null), typed = $state('');
-  // typed the owner password of a file that also has an open password: the open password is asked too, so saved copies keep
-  // it (the owner password must never become the open password of a copy, and it cannot be read back from the file)
+  // typed the owner password of a file that also has an open password: the open password may be typed too (optional), so saved
+  // copies keep it; "Skip" opens anyway and asks when a save needs it (the owner password never becomes the open password)
   let askOpen = $state(false), openTyped = $state(''), openField = $state<HTMLInputElement>();
   const unlocked = () => { locked = null; typed = ''; askOpen = false; openTyped = ''; };
-  async function unlockOpen(e: SubmitEvent) {
-    e.preventDefault();
+  async function unlockOpen(e: SubmitEvent | null, skip = false) {
+    e?.preventDefault();
     if (!locked) return;
     busy = true; error = '';
     try {
@@ -137,12 +137,23 @@
       if (!askOpen) {
         const g = await guard(typed);
         if (g?.owner && !g.open) { askOpen = true; busy = false; await tick(); openField?.focus(); return; }
-      } else if (!(await guard(openTyped))?.open) throw new Error('WRONG_OPEN');
-      await show(l.bytes, l.name, false, typed, false, askOpen ? openTyped : undefined);
+      } else if (!skip && !(await guard(openTyped))?.open) throw new Error('WRONG_OPEN');
+      await show(l.bytes, l.name, false, typed, false, askOpen && !skip ? openTyped : undefined);
       unlocked();
       remember({ key: `pdf:${l.name}:${l.size}`, kind: 'pdf', name: l.name, pages: doc!.sizes.length, handle: l.handle, path: l.path, thumb: await cover() });
     } catch (e) { error = why(e, 'wrongPassword'); }
     busy = false;
+  }
+
+  // a save that must seal the copy but only knows the owner password: the open password is asked here, checked, and used for this document
+  let needOpen = $state<((pw: string | null) => void) | null>(null), needTyped = $state(''), needBad = $state(false), needDialog = $state<HTMLDialogElement>();
+  pool.askOpen = () => new Promise((resolve) => { needTyped = ''; needBad = false; needOpen = (pw) => { needOpen = null; resolve(pw); }; });
+  $effect(() => { if (needOpen) needDialog?.showModal(); });
+  async function submitNeed(e: SubmitEvent) {
+    e.preventDefault();
+    const ok = await pool.tool<{ open: boolean } | null>('guard', { bytes: doc!.bytes.slice(), current: needTyped }).catch(() => null);
+    if (!ok?.open) { needBad = true; return; }
+    doc!.open = needTyped; needOpen?.(needTyped);
   }
 
   async function openFile(file?: File | null, handle?: FileSystemFileHandle, path?: string) {
@@ -281,6 +292,18 @@
 {#if report.length && !drafts.length}
   <CrashReport entry={report[0]} restored={restoredWork} onclose={() => { crash.markSeen(report); report = []; }} />
 {/if}
+{#if needOpen}
+  <dialog bind:this={needDialog} class="needopen" aria-labelledby="need-h" oncancel={(e) => { e.preventDefault(); needOpen?.(null); }}>
+    <form onsubmit={submitNeed}>
+      <h2 id="need-h">{t('needOpenTitle')}</h2>
+      <p class="muted">{t('needOpenHelp')}</p>
+      <label for="needpw">{t('openPwLabel')}</label>
+      <input id="needpw" type="password" bind:value={needTyped} autocomplete="off" />
+      {#if needBad}<p class="error" role="alert">{t('wrongPassword')}</p>{/if}
+      <span class="row"><button class="btn primary" disabled={!needTyped}>{t('save')}</button><button type="button" class="btn" onclick={() => needOpen?.(null)}>{t('cancel')}</button></span>
+    </form>
+  </dialog>
+{/if}
 <Notice message={notice} slow={health?.kind === 'slow'} oncancel={() => pool.cancelAll()} />
 {#if isDesktop}<TitleBar flush={!!(doc || portfolio)} float={!!(doc || portfolio)} /><PackPrompt />{/if}
 <input bind:this={picker} type="file" accept="application/pdf,.pdf,.waraq,.png,.jpg,.jpeg,{CONVERTIBLE_ACCEPT}" hidden onchange={(e) => { openMany(Array.from(e.currentTarget.files ?? []).map((file) => ({ file }))); e.currentTarget.value = ''; }} />
@@ -301,7 +324,7 @@
     </div>
     <section class="open" aria-labelledby="open-h">
       <h2 id="open-h">{t('startOpenTitle')}</h2>
-      <p class="muted">{t('dropHere')}</p>
+      <p class="muted drop">{t('dropHere')}</p>
       <div class="actions">
         <button class="btn primary big" onclick={plain} disabled={busy}>{@html icon('upload')}{busy ? t('reading') : t('open')}</button>
       </div>
@@ -309,11 +332,12 @@
         <form class="lock" onsubmit={unlockOpen}>
           <label for="pdfpw">{@html icon('protect')}{t('needsPassword')} <strong>{locked.name}</strong></label>
           <span><input id="pdfpw" type="password" bind:value={typed} autocomplete="off" />
-          <button class="btn primary" disabled={busy || !typed || (askOpen && !openTyped)}>{t('openShort')}</button>
+          <button class="btn primary" disabled={busy || !typed}>{t('openShort')}</button>
           <button type="button" class="btn" onclick={() => { unlocked(); error = ''; }}>{t('cancel')}</button></span>
           {#if askOpen}
             <label for="pdfopen" class="muted">{t('openPwAsk')}</label>
             <input id="pdfopen" type="password" bind:value={openTyped} bind:this={openField} autocomplete="off" />
+          <button type="button" class="btn" disabled={busy} onclick={() => unlockOpen(null, true)}>{t('skipOpenPw')}</button>
           {/if}
         </form>
       {/if}
@@ -380,6 +404,7 @@
     {/if}
     <p class="crashrow">
       {#if quietExit && !drafts.length}<span class="muted small" role="status">{t('closedQuietly')}</span>{/if}
+      {#if crashes}<button class="btn primary" onclick={async () => { report = (await crash.entries()).slice(0, 1); }}>{t('sendLastReport')}</button>{/if}
       <button class="btn" onclick={reportProblem}>{t('reportProblem')}</button>
       {#if crashes}
         <button class="btn" onclick={copyReport}>{copied ? t('crashCopied') : t('copyCrash')}</button>
@@ -427,6 +452,14 @@
   .lock label { display: inline-flex; align-items: center; gap: var(--s-8); }
   .lock span { display: flex; gap: var(--s-8); }
   .lock input { min-height: var(--control); padding: 0 var(--s-12); border: 1px solid var(--line); border-radius: var(--r-8); background: var(--paper); }
+  .needopen { width: min(420px, calc(100% - 2 * var(--s-16))); padding: var(--s-24); border: 1px solid var(--line); border-radius: var(--r-16); background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+  .needopen::backdrop { background: var(--veil); }
+  .needopen form { display: grid; gap: var(--s-8); }
+  .needopen h2 { margin: 0; font-size: var(--fs-20); }
+  .needopen p { margin: 0; }
+  .needopen input { min-height: var(--control); padding: 0 var(--s-12); border: 1px solid var(--line); border-radius: var(--r-8); background: var(--paper); }
+  .needopen .row { display: flex; gap: var(--s-8); }
+  @media (pointer: coarse) { .drop { display: none; } }
   .crashrow { display: flex; gap: var(--s-8); margin: 0; align-items: center; flex-wrap: wrap; }
   .updaterow { display: grid; gap: var(--s-8); justify-items: center; }
   .banner { display: grid; gap: var(--s-8); justify-items: center; padding: var(--s-16); border: 1px solid var(--green); border-radius: var(--r-12); background: var(--green-soft); text-align: center; max-width: 520px; }

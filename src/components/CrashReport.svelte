@@ -2,15 +2,20 @@
   // "Waraq closed unexpectedly. Your work was restored. Send a report?" — shown on the next start. The person can read the exact
   // text (Preview), then send it by email, report it on GitHub, or not send it. Nothing is sent without a click on one of the links.
   import { t } from '../lib/i18n.svelte';
-  import { reportText, mailtoUrl, githubUrl, type Entry } from '../lib/crashreport';
+  import { reportText, sendReport, mailtoUrl, githubUrl, type Entry } from '../lib/crashreport';
   import { askFirst, setAsk, openFile } from '../lib/crashlog';
   import { isDesktop, openExternal } from '../lib/desktop';
+  import { version } from '../lib/update.svelte';
 
   let { entry, restored, onclose }: { entry: Entry; restored: boolean; onclose: () => void } = $props();
-  let dialog = $state<HTMLDialogElement>(), preview = $state(false), ask = $state(askFirst()), attach = $state(false);
+  let dialog = $state<HTMLDialogElement>(), preview = $state(false), ask = $state(askFirst()), attach = $state(false), sent = $state<'' | 'busy' | 'ok' | 'fail'>('');
   const text = $derived(reportText(entry)), mail = $derived(mailtoUrl(text)), issue = $derived(githubUrl(text));
   $effect(() => { dialog?.showModal(); });
   const finish = () => { setAsk(ask); setTimeout(onclose, 300); }; // after the browser has followed the link
+  async function send() {
+    sent = 'busy';
+    try { await sendReport(text, version); sent = 'ok'; setAsk(ask); setTimeout(onclose, 1500); } catch { sent = 'fail'; }
+  }
   function go(e: MouseEvent, url: string, withFile = false) {
     if (isDesktop) { // the desktop program opens the mail program / browser itself; the log file is shown for attaching
       e.preventDefault(); openExternal(url);
@@ -30,10 +35,12 @@
     <pre dir="ltr" tabindex="0" aria-label={t('crashPreview')}>{text}</pre>
   {/if}
   <div class="buttons">
-    <a class="btn primary" href={mail} onclick={(e) => go(e, mail, true)}>{t('sendEmail')}</a>
+    <button class="btn primary" disabled={sent === 'busy' || sent === 'ok'} onclick={send}>{sent === 'busy' ? t('reportSending') : t('sendReport')}</button>
+    <a class="btn" href={mail} onclick={(e) => go(e, mail, true)}>{t('sendEmail')}</a>
     <a class="btn" href={issue} target="_blank" rel="noopener" onclick={(e) => go(e, issue)}>{t('reportGithub')}</a>
     <button class="btn" onclick={() => { setAsk(ask); onclose(); }}>{t('dontSend')}</button>
   </div>
+  {#if sent === 'ok'}<p role="status">{t('reportSent')}</p>{:else if sent === 'fail'}<p class="fail" role="alert">{t('reportFailed')}</p>{/if}
   {#if attach}<p class="muted" role="status">{t('crashAttach')}</p>{/if}
   <label class="ask"><input type="checkbox" bind:checked={ask} />{t('alwaysAsk')}</label>
 </dialog>
@@ -50,6 +57,7 @@
   .buttons { display: flex; flex-wrap: wrap; gap: var(--s-8); }
   .btn { text-decoration: none; width: fit-content; color: var(--ink); } /* the two links look like buttons, not like links */
   .btn.primary { color: var(--on-green); }
+  .fail { color: var(--danger); }
   .ask { display: inline-flex; align-items: center; gap: var(--s-8); min-height: var(--control); }
   .ask input { width: 18px; height: 18px; accent-color: var(--green); }
 </style>

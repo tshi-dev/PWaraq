@@ -54,3 +54,11 @@ test('an entry the desktop program wrote (fewer fields) is read with defaults', 
   assert.deepEqual([e.log, e.task, e.lang, e.seen], [[], '', '', false]);
   assert.ok(reportText(e).includes('desktop program error'));
 });
+
+test('the form body carries the report and the version in the two form fields, cut to fit', async () => {
+  const { formBody, FORM } = await import('../../src/lib/crashreport.ts');
+  const b = formBody('x'.repeat(20000), '1.0.0-beta.5');
+  assert.equal(b.get('entry.2138058848'), '1.0.0-beta.5');
+  assert.ok(encodeURIComponent(b.get('entry.2023254085')).length <= 8000);
+  assert.match(FORM, /^https:\/\/docs\.google\.com\/forms\/d\/e\/.+\/formResponse$/);
+});

@@ -141,10 +141,20 @@ export class EnginePool {
   get password() { return this.sources.get(0)?.password ?? ''; }
 
   /** `out` (a new copy of the open document) with the document's own protection: same algorithm, password and limits. */
-  keep(out: Uint8Array) {
+  keep(out: Uint8Array): Promise<Uint8Array> {
     const s = this.sources.get(0);
-    return s ? this.tool('seal', { bytes: out, src: s.bytes.slice(), current: s.password ?? '', open: s.open ?? '' }) : Promise.resolve(out);
+    if (!s) return Promise.resolve(out);
+    const seal = () => this.tool<Uint8Array>('seal', { bytes: out, src: s.bytes.slice(), current: s.password ?? '', open: s.open ?? '' });
+    return seal().catch(async (e) => { // opened with the owner password only: the open password is asked now, never guessed from the owner password
+      if ((e as Error)?.message !== 'NEED_OPEN_PASSWORD' || !this.askOpen) throw e;
+      const pw = await this.askOpen();
+      if (pw == null) throw new Error('cancelled'); // nothing is saved, nothing is lost
+      s.open = pw;
+      return seal();
+    });
   }
+  /** Set by the app: asks for the open password (null when the person cancels; the app checks it). */
+  askOpen?: () => Promise<string | null>;
 
   /** A new PDF from pages of the open sources. */
   build(build: Build) {

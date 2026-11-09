@@ -65,3 +65,33 @@ test('save after Comment keeps the password and limits (owner password known)', 
   const d = pdf(file.bytes); d.authenticatePassword('pw');
   expect(d.loadPage(0).getAnnotations()).toHaveLength(1);
 });
+
+test('owner password only: Skip opens the file; a save asks for the open password; cancel saves nothing; a wrong one is refused', async ({ page }, info) => {
+  test.setTimeout(120_000);
+  await page.goto('/');
+  await page.locator('input[type=file]').first().setInputFiles(lockedFile(info.outputPath('skip.pdf'), fixture('three.pdf')));
+  await page.locator('#pdfpw').fill('own');
+  await page.locator('.lock').getByRole('button', { name: 'Open' }).click();
+  await page.locator('.lock').getByRole('button', { name: 'Skip' }).click();
+  await expect(page.locator('.page').first()).toBeVisible({ timeout: 60_000 });
+  await page.getByRole('button', { name: 'Organize' }).click();
+  await page.locator('.cell').nth(1).click();
+  await page.keyboard.press('Delete');
+  await expect(page.locator('.cell')).toHaveCount(2);
+  const save = () => page.getByRole('button', { name: 'Save', exact: true }).first().click();
+  const ask = page.getByRole('dialog', { name: 'Type the open password to save' });
+  await save();
+  await expect(ask).toBeVisible();
+  await ask.getByRole('button', { name: 'Cancel' }).click();
+  await expect(ask).toBeHidden();
+  await expect(page.locator('.cell')).toHaveCount(2); // nothing lost
+  const file = await saved(page, async () => {
+    await save();
+    await ask.getByLabel('Open password').fill('own'); // the owner password is not the open password
+    await ask.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(ask.getByText('Wrong password.')).toBeVisible();
+    await ask.getByLabel('Open password').fill('pw');
+    await ask.getByRole('button', { name: 'Save', exact: true }).click();
+  });
+  stillLocked(file.bytes, 2);
+});

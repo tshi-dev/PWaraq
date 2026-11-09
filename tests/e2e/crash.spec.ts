@@ -194,3 +194,35 @@ for (const [lang, theme] of COMBOS) test(`design rules hold on the crash dialog 
   expect(r1.sample, 'dialog').toEqual([]);
   await page.screenshot({ path: info.outputPath(`crash-${lang}-${theme}.png`) });
 });
+
+test('Send report: one press posts the report to the form in the background; no tab, window or page opens', async ({ page, context }) => {
+  test.setTimeout(120_000);
+  const posts: { url: string; body: string }[] = [];
+  await context.route('https://docs.google.com/**', (r) => { posts.push({ url: r.request().url(), body: r.request().postData() ?? '' }); r.fulfill({ status: 200, body: '' }); });
+  let opened = 0; context.on('page', () => opened++);
+  await page.goto('/');
+  await crashed(page);
+  await page.reload();
+  const dialog = page.getByRole('dialog', { name: 'Waraq closed unexpectedly' });
+  await dialog.getByRole('button', { name: 'Send report' }).click();
+  await expect(dialog.getByText('Sent — thank you')).toBeVisible();
+  expect(posts).toHaveLength(1);
+  expect(posts[0].url).toContain('/formResponse');
+  const f = new URLSearchParams(posts[0].body);
+  expect(f.get('entry.2023254085')).toContain('Waraq crash report');
+  expect(f.get('entry.2138058848')).toBeTruthy();
+  expect(opened).toBe(0);
+  await expect(dialog).toBeHidden();
+});
+
+test('Send report offline: says it could not send and keeps the email and GitHub buttons', async ({ page, context }) => {
+  test.setTimeout(120_000);
+  await context.route('https://docs.google.com/**', (r) => r.abort());
+  await page.goto('/');
+  await crashed(page);
+  await page.reload();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: 'Send report' }).click();
+  await expect(dialog.getByText('Could not send (offline?)')).toBeVisible();
+  await expect(dialog.getByRole('link', { name: 'Send by email' })).toBeVisible();
+});
