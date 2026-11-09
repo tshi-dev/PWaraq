@@ -30,7 +30,7 @@ $old = Join-Path $work ('sweep-before-' + $SweepAt.ToString('yyyy-MM-dd')); New-
 Get-ChildItem "$work\models\ara_[A-Z]p.traineddata.gz", "$work\results\*-ara_[A-Z]p.log" -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -lt $SweepAt } | Move-Item -Destination $old -Force   # the earlier sweep's models and logs: kept, but the pipeline skips a model that exists
 for ($try = 1; $try -le 30; $try++) {   # the sweep: train in WSL, measure, verdicts in SUMMARY.md
   try {
-    & (Join-Path $PSScriptRoot 'run-pipeline.ps1') -Work $work -Offsets @() -Full -Variants 'A:10000:0.0001','B:20000:0.00005','C:6000:0.0002','D:30000:0.00005','E:10000:0.00003','F:30000:0.00005:modern'   # F = D + 30 % modern-font lines (synth.py modern)
+    & (Join-Path $PSScriptRoot 'run-pipeline.ps1') -Work $work -Offsets @() -Full -Variants 'A:10000:0.0001','B:20000:0.00005','C:6000:0.0002','D:30000:0.00005','E:10000:0.00003','F:30000:0.00005:modern','G:30000:0.00005:modern50','H:60000:0.00005:modern'   # F = D + 30 % modern-font lines (synth.py modern; KEEP at the 9 Nov halfway check), G = 50 %, H = F trained twice as long
     Note 'finished'; Set-Content (Join-Path $work 'DONE') (Get-Date); break
   } catch { Note "sweep FAILED: $($_.Exception.Message)"; Start-Sleep 600 }
 }
