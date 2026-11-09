@@ -70,8 +70,7 @@
   </section>
 
   <aside class="side">
-    <h2>{t('redact')}</h2>
-    <p class="help">{t('redactHelp')}</p>
+    <div class="ph"><h2>{t('redact')}</h2><p>{t('redactHelp')}</p></div>
     <h2>{t('findToMark')}</h2>
     <label class="choice"><input type="radio" bind:group={kind} value="phone" />{t('findPhone')}</label>
     <label class="choice"><input type="radio" bind:group={kind} value="email" />{t('findEmail')}</label>
@@ -81,29 +80,27 @@
     <p class="count num">{marks.length} {t('marksCount')}</p>
     <button class="btn" onclick={() => (marks = [])} disabled={busy || !marks.length}>{@html icon('clear')}{t('clearMarks')}</button>
     <label class="switch"><input type="checkbox" bind:checked={metadata} />{t('removeMetadata')}</label>
-    <span class="grow"></span>
-    <button class="btn primary" onclick={apply} disabled={busy || (!marks.length && !metadata)}>{@html icon('redact')}{t('redactApply')}</button>
-    <p class="state" aria-live="polite">{busy ? t('applying') : note}</p>
-    {#if error}<p class="error" role="alert">{error}</p>{/if}
+    <div class="pf">
+      <button class="btn primary" onclick={apply} disabled={busy || (!marks.length && !metadata)}>{@html icon('redact')}{t('redactApply')}</button>
+      <p class="state" aria-live="polite">{busy ? t('applying') : note}</p>
+      {#if error}<p class="error" role="alert">{error}</p>{/if}
+    </div>
   </aside>
 </div>
 
 <style>
-  .redact { height: 100%; display: grid; grid-template-columns: 1fr 340px; min-height: 0; }
+  .redact { height: 100%; display: grid; grid-template-columns: 1fr var(--panel); min-height: 0; }
   .pages { display: flex; flex-direction: column; align-items: safe center; gap: var(--s-16); background: var(--canvas); padding: var(--s-24); overflow: auto; }
   .sheet { position: relative; flex: none; background: #fff; box-shadow: var(--shadow); cursor: crosshair; touch-action: none; }
   .sheet canvas { width: 100%; height: 100%; display: block; pointer-events: none; }
   .mark { position: absolute; padding: 0; border: 2px solid var(--danger); background: rgba(0, 0, 0, .55); cursor: pointer; }
   .mark.drag { pointer-events: none; }
-  .side { display: flex; flex-direction: column; gap: var(--s-12); padding: var(--s-16); background: var(--surface); border-inline-start: 1px solid var(--line); overflow-y: auto; }
-  h2 { margin: var(--s-8) 0 0; font-size: var(--fs-18); }
-  .help, .count, .state { margin: 0; color: var(--muted); }
+  .count, .state { margin: 0; color: var(--muted); }
   .state { font-size: var(--fs-12); min-height: 18px; }
   .field { display: grid; gap: var(--s-8); font-weight: 600; }
   .field input { min-height: var(--control); padding: 0 var(--s-12); border: 1px solid var(--line); border-radius: var(--r-8); background: var(--paper); font-weight: 400; }
   .switch, .choice { display: flex; align-items: center; gap: var(--s-8); min-height: var(--control); font-weight: 600; }
   .switch input, .choice input { flex: none; width: 20px; height: 20px; accent-color: var(--green); }
-  .grow { flex: 1; }
   .error { margin: 0; color: var(--danger); }
   @media (max-width: 900px) { .redact { grid-template-columns: 1fr; grid-template-rows: 1fr auto; } .side { border-inline-start: 0; border-top: 1px solid var(--line); } }
 </style>

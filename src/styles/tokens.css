@@ -15,7 +15,7 @@
   --fs-12: 12px; --fs-14: 14px; --fs-16: 16px; --fs-18: 18px; --fs-20: 20px; --fs-24: 24px; --fs-32: 32px; --fs-40: 40px;
   --s-4: 4px; --s-8: 8px; --s-12: 12px; --s-16: 16px; --s-24: 24px; --s-32: 32px; --s-48: 48px;
   --r-8: 8px; --r-12: 12px; --r-16: 16px;
-  --control: 36px; --touch: 40px; --thumb: 32px;
+  --control: 36px; --touch: 40px; --thumb: 32px; --panel: 340px; /* width of every task side panel */
   --shadow: 0 5px 20px #204b3814, 0 1px 2px #204b380f;
   --font: 'Segoe UI Variable Text', 'Segoe UI', Tajawal, system-ui, sans-serif;
   color-scheme: light;
@@ -59,7 +59,19 @@ button { cursor: pointer; }
 .btn.primary:hover { background: var(--green-deep); }
 .btn.icon { width: var(--control); padding: 0; border-color: transparent; background: transparent; color: var(--muted); }
 .btn.icon:hover { background: var(--green-soft); color: var(--ink); }
+/* disabled: always the plain button at half strength (a washed-out green reads as broken) */
 .btn:disabled { opacity: .5; cursor: default; }
+.btn:disabled:hover, .btn.primary:disabled, .btn.primary:disabled:hover { background: var(--surface); border-color: var(--line); color: var(--ink); }
+.btn.icon:disabled:hover { background: transparent; border-color: transparent; color: var(--muted); }
+input[type='checkbox'], input[type='radio'] { accent-color: var(--green); }
+/* task side panels (Comment, Forms, Redact, OCR, Protect...): header on top (18/600 title + one muted line), content scrolls, the primary action is pinned at the bottom in .pf */
+.side { display: flex; flex-direction: column; gap: var(--s-12); padding: var(--s-16); background: var(--surface); border-inline-start: 1px solid var(--line); overflow-y: auto; }
+.side h2 { margin: var(--s-8) 0 0; font-size: var(--fs-16); font-weight: 600; }
+.side > .ph { display: grid; gap: var(--s-4); }
+.side > .ph h2 { margin: 0; font-size: var(--fs-18); }
+.side > .ph p { margin: 0; color: var(--muted); }
+.side .pf { position: sticky; bottom: calc(-1 * var(--s-16)); margin: auto calc(-1 * var(--s-16)) calc(-1 * var(--s-16)); padding: var(--s-12) var(--s-16); display: grid; gap: var(--s-8); background: var(--surface); border-top: 1px solid var(--line); }
+.side .pf > p { margin: 0; }
 svg.icon { width: 18px; height: 18px; flex: none; }
 html, body { overflow: hidden; }
 #app { height: 100%; }

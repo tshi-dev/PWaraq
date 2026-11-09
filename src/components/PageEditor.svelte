@@ -507,7 +507,7 @@
   .flip { display: grid; transform: scaleX(-1); }
   .where { margin-inline-start: auto; color: var(--muted); }
   .btn.on { background: var(--green-soft); border-color: var(--green); color: var(--green-deep); }
-  .body { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
+  .body { display: grid; grid-template-columns: 1fr var(--panel); min-height: 0; }
   .stage { position: relative; overflow: auto; display: flex; padding: var(--s-24); background: var(--canvas); min-height: 0; }
   .busy { position: absolute; inset: 0; z-index: 3; margin: 0; display: grid; place-items: center; background: var(--veil); font-size: var(--fs-16); font-weight: 600; }
   .sheet { position: relative; flex: none; margin: auto; background: var(--surface); box-shadow: var(--shadow); touch-action: none; }
@@ -537,11 +537,11 @@
   .lhead { display: flex; align-items: center; justify-content: space-between; }
   .close, .layers-btn { display: none; }
   .order { display: flex; gap: var(--s-8); }
-  .list { display: flex; flex-direction: column; gap: var(--s-4); margin: 0; padding: 0; list-style: none; }
-  .list li { display: flex; align-items: center; gap: var(--s-4); border-radius: var(--r-8); transition: background-color .15s ease-out; }
-  .list li:hover { background: var(--green-soft); }
-  .list li.on { background: var(--green-soft); outline: 1px solid var(--green); outline-offset: -1px; }
-  .pick { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--s-8); min-height: var(--control); padding: var(--s-4) var(--s-8); border: 0; border-radius: var(--r-8); background: transparent; color: var(--ink); text-align: start; }
+  .list { display: flex; flex-direction: column; gap: var(--s-8); margin: 0; padding: 0; list-style: none; }
+  .list li { display: flex; align-items: center; gap: var(--s-8); }
+  .list li:hover .pick { background: var(--green-soft); }
+  .list li.on .pick { background: var(--green-soft); outline: 1px solid var(--green); outline-offset: -1px; }
+  .pick { transition: background-color .15s ease-out; flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--s-8); min-height: var(--control); padding: var(--s-4) var(--s-8); border: 0; border-radius: var(--r-8); background: transparent; color: var(--ink); text-align: start; }
   .list li.on .pick { color: var(--green-deep); font-weight: 600; }
   .list li.off .pick { color: var(--muted); }
   .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

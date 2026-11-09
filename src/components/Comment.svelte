@@ -186,8 +186,7 @@
   </section>
 
   <aside class="side">
-    <h2>{t('comment')}</h2>
-    <p class="help">{t('commentHelp')}</p>
+    <div class="ph"><h2>{t('comment')}</h2><p>{t('commentHelp')}</p></div>
     <div class="tools" role="toolbar" aria-label={t('comment')}>
       {#each TOOLS as [id, label]}
         <button class="tool" class:on={tool === id} aria-pressed={tool === id} onclick={() => choose(id)} disabled={doc < 0}>{t(label)}</button>
@@ -208,13 +207,14 @@
     {:else}
       <p class="help">{t('cNone')}</p>
     {/if}
-    <span class="grow"></span>
+    <div class="pf">
     <div class="row">
       <button class="btn icon" onclick={undo} disabled={!past.length} title={t('undo')} aria-label={t('undo')}>{@html icon('undo')}</button>
       <button class="btn icon" onclick={redo} disabled={!future.length} title={t('redo')} aria-label={t('redo')}><span class="flip">{@html icon('undo')}</span></button>
       <span class="state">{count} {t('cCount')}</span>
     </div>
     {#if error}<p class="error" role="alert">{error}</p>{/if}
+    </div>
   </aside>
 </div>
 
@@ -255,7 +255,7 @@
 {/snippet}
 
 <style>
-  .comment { height: 100%; display: grid; grid-template-columns: 1fr 340px; min-height: 0; }
+  .comment { height: 100%; display: grid; grid-template-columns: 1fr var(--panel); min-height: 0; }
   .pages { display: flex; flex-direction: column; align-items: safe center; gap: var(--s-16); background: var(--canvas); padding: var(--s-24); overflow: auto; }
   .sheet { position: relative; flex: none; background: #fff; box-shadow: var(--shadow); }
   .sheet canvas { width: 100%; height: 100%; display: block; }
@@ -268,8 +268,6 @@
   .tb { width: 100%; height: 100%; overflow: hidden; font: 12px/1.2 Helvetica, Arial, sans-serif; white-space: pre-wrap; overflow-wrap: anywhere; }
   .outline { fill: none; stroke: var(--green); stroke-width: 1; stroke-dasharray: 4 3; pointer-events: none; }
   .handle { fill: #fff; stroke: var(--green); stroke-width: 1.5; cursor: nwse-resize; }
-  .side { display: flex; flex-direction: column; gap: var(--s-12); padding: var(--s-16); background: var(--surface); border-inline-start: 1px solid var(--line); overflow-y: auto; }
-  h2 { margin: var(--s-8) 0 0; font-size: var(--fs-18); }
   .help, .state { margin: 0; color: var(--muted); }
   .state { font-size: var(--fs-12); margin-inline-start: auto; }
   .tools { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-8); }
@@ -277,11 +275,10 @@
   .tool.on { background: var(--green-soft); border-color: var(--green); }
   .tool:disabled { opacity: .55; }
   .row { display: flex; align-items: center; gap: var(--s-8); }
-  .swatch { width: var(--control); height: var(--control); border: 2px solid var(--line); border-radius: 50%; padding: 0; cursor: pointer; }
+  .swatch { width: var(--control); height: var(--control); border: 1px solid var(--muted); border-radius: 50%; padding: 0; cursor: pointer; } /* a ring that shows on every panel, also round the dark ink */
   .swatch.on { border-color: var(--ink); box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); }
   .field { display: grid; gap: var(--s-8); font-weight: 600; }
   .field textarea { padding: var(--s-8) var(--s-12); border: 1px solid var(--line); border-radius: var(--r-8); background: var(--paper); font: inherit; font-weight: 400; resize: vertical; }
-  .grow { flex: 1; }
   .flip { display: inline-flex; transform: scaleX(-1); }
   .error { margin: 0; color: var(--danger); }
   @media (max-width: 900px) { .comment { grid-template-columns: 1fr; grid-template-rows: 1fr auto; } .side { border-inline-start: 0; border-top: 1px solid var(--line); } }

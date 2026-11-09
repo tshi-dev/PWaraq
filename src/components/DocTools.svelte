@@ -192,13 +192,15 @@
       {:else}<p class="help">{t('notLocked')}</p>{/if}
       {/if}
     {/if}
-    <p class="state num" aria-live="polite">{busy || note}</p>
-    {#if error}<p class="error" role="alert">{error}</p>{/if}
+    <div class="pf">
+      <p class="state num" aria-live="polite">{busy || note}</p>
+      {#if error}<p class="error" role="alert">{error}</p>{/if}
+    </div>
   </aside>
 </div>
 
 <style>
-  .tools { height: 100%; display: grid; grid-template-columns: 1fr 340px; min-height: 0; }
+  .tools { height: 100%; display: grid; grid-template-columns: 1fr var(--panel); min-height: 0; }
   .preview { display: grid; place-content: center; justify-items: center; gap: var(--s-12); background: var(--canvas); padding: var(--s-24); overflow: auto; }
   .sheet { position: relative; background: #fff; box-shadow: var(--shadow); overflow: hidden; }
   .sheet canvas { width: 100%; height: 100%; display: block; }
@@ -210,8 +212,6 @@
   .pno.bc, .pno.tc { left: 50%; transform: translateX(-50%); } .pno.bl, .pno.tl { left: 8px; } .pno.br, .pno.tr { right: 8px; }
   .pno.bl, .pno.bc, .pno.br { bottom: 6px; } .pno.tl, .pno.tc, .pno.tr { top: 6px; }
   .muted { margin: 0; color: var(--muted); }
-  .side { display: flex; flex-direction: column; gap: var(--s-12); padding: var(--s-16); background: var(--surface); border-inline-start: 1px solid var(--line); overflow-y: auto; }
-  h2 { margin: var(--s-8) 0 0; font-size: var(--fs-18); }
   .help { margin: 0; color: var(--muted); }
   .field { display: grid; gap: var(--s-8); font-weight: 600; }
   .field input:not([type='range']), .field select { min-height: var(--control); padding: 0 var(--s-12); border: 1px solid var(--line); border-radius: var(--r-8); background: var(--paper); font-weight: 400; }

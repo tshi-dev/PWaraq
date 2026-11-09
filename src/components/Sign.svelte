@@ -307,7 +307,7 @@
 <input bind:this={pfxInput} type="file" accept=".pfx,.p12,application/x-pkcs12" hidden onchange={async (e) => { const p = e.currentTarget.files?.[0]; e.currentTarget.value = ''; if (p) pfx = { name: p.name, bytes: new Uint8Array(await p.arrayBuffer()) }; }} />
 <div class="signing">
   <div class="tools" role="toolbar" aria-label={t('sign')}>
-    <span class="where num" title={f.name}>{f.name} · {cur + 1} / {files.length}</span>
+    <span class="where" title={f.name}>{f.name}</span>
     <span class="sep"></span>
     <button class="btn icon" onclick={() => (page = Math.max(0, page - 1))} disabled={page === 0} title={t('prevPage')} aria-label={t('prevPage')}><span class="back">{@html icon('arrow')}</span></button>
     <span class="num muted">{t('page')} {page + 1} {t('of')} {f.sizes.length}</span>
@@ -319,7 +319,6 @@
       <span class="badge" class:bad={st !== 'sigValid'} role="status">{@html icon(st === 'sigValid' ? 'shield' : 'warning')}<span class="num">{f.sigs.length}</span> {t(f.sigs.length === 1 ? 'signature1' : 'signatureN')} · {t(st)}</span>
     {/if}
     <span class="end">
-      <button class="btn primary" onclick={signNext} disabled={!!busy || !sig}>{@html icon('signature')}{t('signNext')} <kbd>Enter</kbd></button>
       <button class="btn" onclick={saveAll} disabled={!!busy || !files.some((d) => d.placed.length)}>{@html icon('download')}{t('saveAll')}</button>
     </span>
   </div>
@@ -359,6 +358,7 @@
     </div>
 
     <aside class="side" aria-label={t('options')}>
+      <div class="ph"><h2>{t('sign')}</h2><p>{t('placeHelp')}</p></div>
       {#if f.sigs?.length}
         <section aria-label={t('signatures')}>
           <h2>{t('signatures')}</h2>
@@ -385,7 +385,6 @@
           <p class="note">{@html icon('info')}<span>{f.spots.length ? t('allSigned') : t('noSpots')}</span></p>
         {/each}
       {/if}
-      <p class="help">{t('placeHelp')}</p>
 
       <section>
         <h2>{t('filesToSign')}</h2>
@@ -530,6 +529,7 @@
       </section>
 
       <label class="field"><span>{t('nameUnder')}</span><input class="input" bind:value={name} dir="auto" /></label>
+      <div class="pf"><button class="btn primary" onclick={signNext} disabled={!!busy || !sig}>{@html icon('signature')}{t('signNext')} <kbd>Enter</kbd></button></div>
     </aside>
   </div>
 </div>
@@ -562,20 +562,20 @@
   .check input { width: 20px; height: 20px; margin: 0; accent-color: var(--green); }
   .idbtn { flex: 1; }
   .field input[type='password'], .field input[type='email'], .field input[type='url'] { min-height: var(--control); padding: 0 var(--s-12); border: 1px solid var(--line); border-radius: var(--r-8); background: var(--paper); font-weight: 400; }
-  .body { display: grid; grid-template-columns: 1fr 320px; min-height: 0; }
+  .body { display: grid; grid-template-columns: 1fr var(--panel); min-height: 0; }
   .stage { position: relative; overflow: auto; display: grid; place-items: safe center; padding: var(--s-24); background: var(--canvas); min-height: 0; }
   .busy { position: absolute; inset: 0; z-index: 3; margin: 0; display: grid; place-items: center; background: var(--veil); font-size: var(--fs-16); font-weight: 600; }
   .sheet { position: relative; background: var(--surface); box-shadow: var(--shadow); cursor: crosshair; }
   .sheet canvas { position: absolute; inset: 0; }
-  .spot { position: absolute; padding: 0; border: 2px solid var(--green); border-radius: 4px; background: var(--select-tint); cursor: pointer; }
-  .spot.next { background: var(--green-soft); box-shadow: 0 0 0 4px var(--select-tint); mix-blend-mode: multiply; }
+  .spot { position: absolute; padding: 0; border: 2px solid var(--green); border-radius: var(--r-8); background: var(--select-tint); cursor: pointer; }
+  .spot.next { background: color-mix(in srgb, var(--green) 24%, transparent); box-shadow: 0 0 0 4px var(--select-tint); } /* the page is white in every theme: a see-through green tint keeps the form's own label readable */
   .spot.date { border-style: dashed; pointer-events: none; }
-  .ghost { position: absolute; display: grid; place-items: center; border: 2px dashed var(--green); border-radius: 4px; background: var(--select-tint); color: var(--green-deep); font-size: var(--fs-12); font-weight: 600; text-align: center; pointer-events: none; }
+  .ghost { position: absolute; display: grid; place-items: center; border: 2px dashed var(--green); border-radius: var(--r-8); background: var(--select-tint); color: var(--green-deep); font-size: var(--fs-12); font-weight: 600; text-align: center; pointer-events: none; }
   .set { position: absolute; pointer-events: none; }
   .settext { position: absolute; white-space: nowrap; line-height: 1.3; font-family: Tajawal, sans-serif; pointer-events: none; }
-  .side { display: flex; flex-direction: column; gap: var(--s-16); padding: var(--s-16); background: var(--surface); border-inline-start: 1px solid var(--line); overflow-y: auto; }
+  .side { gap: var(--s-16); }
   .side section { display: grid; gap: var(--s-8); }
-  .side h2 { margin: 0; font-size: var(--fs-16); }
+  .side h2 { margin: 0; }
   .need { display: flex; align-items: center; justify-content: space-between; gap: var(--s-8); padding: var(--s-8) var(--s-12); border: 1px solid var(--green); border-radius: var(--r-8); background: var(--green-soft); font-weight: 600; }
   .note { display: flex; gap: var(--s-8); margin: 0; padding: var(--s-12); border-radius: var(--r-8); background: var(--green-soft); }
   .note :global(svg) { flex: none; color: var(--green); }

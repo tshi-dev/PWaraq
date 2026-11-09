@@ -75,8 +75,7 @@
   </section>
 
   <aside class="side">
-    <h2>{t('ocr')}</h2>
-    <p class="help">{t('ocrHelp')}</p>
+    <div class="ph"><h2>{t('ocr')}</h2><p>{t('ocrHelp')}</p></div>
     <h2>{t('ocrLanguages')}</h2>
     <label class="switch"><input type="checkbox" bind:checked={ara} disabled={busy} />{t('ocrArabic')}</label>
     <label class="switch"><input type="checkbox" bind:checked={eng} disabled={busy} />{t('ocrEnglish')}</label>
@@ -89,35 +88,33 @@
       <label class="choice"><input type="radio" bind:group={quality} value="best" disabled={busy} />{t('ocrBest')}</label>
       {#if quality === 'best'}<p class="help">{t('ocrBestHelp')}</p>{/if}
     {/if}
-    <span class="grow"></span>
-    {#if busy && at.n}
-      <p class="state num" aria-live="polite">{t('ocrProgress')} {at.n} / {at.of} — {Math.round(at.ratio * 100)}%</p>
-      <progress max="1" value={(at.n - 1 + at.ratio) / at.of} aria-label={t('ocrProgress')}></progress>
-    {:else}
-      <p class="state" aria-live="polite">{busy ? t('reading') : note}</p>
-    {/if}
-    {#if busy}
-      <button class="btn" onclick={() => { stopped = true; abort?.abort(); }}>{@html icon('close')}{t('cancel')}</button>
-    {:else}
-      <button class="btn primary" onclick={start} disabled={!passes.length}>{@html icon('ocr')}{t('ocrStart')}</button>
-    {/if}
-    {#if error}<p class="error" role="alert">{error}</p>{/if}
+    <div class="pf">
+      {#if busy && at.n}
+        <p class="state num" aria-live="polite">{t('ocrProgress')} {at.n} / {at.of} — {Math.round(at.ratio * 100)}%</p>
+        <progress max="1" value={(at.n - 1 + at.ratio) / at.of} aria-label={t('ocrProgress')}></progress>
+      {:else}
+        <p class="state" aria-live="polite">{busy ? t('reading') : note}</p>
+      {/if}
+      {#if busy}
+        <button class="btn" onclick={() => { stopped = true; abort?.abort(); }}>{@html icon('close')}{t('cancel')}</button>
+      {:else}
+        <button class="btn primary" onclick={start} disabled={!passes.length}>{@html icon('ocr')}{t('ocrStart')}</button>
+      {/if}
+      {#if error}<p class="error" role="alert">{error}</p>{/if}
+    </div>
   </aside>
 </div>
 
 <style>
-  .ocr { height: 100%; display: grid; grid-template-columns: 1fr 340px; min-height: 0; }
+  .ocr { height: 100%; display: grid; grid-template-columns: 1fr var(--panel); min-height: 0; }
   .pages { display: flex; flex-direction: column; align-items: safe center; gap: var(--s-16); background: var(--canvas); padding: var(--s-24); overflow: auto; }
   .sheet { position: relative; flex: none; background: #fff; box-shadow: var(--shadow); }
   .sheet canvas { width: 100%; height: 100%; display: block; }
-  .side { display: flex; flex-direction: column; gap: var(--s-12); padding: var(--s-16); background: var(--surface); border-inline-start: 1px solid var(--line); overflow-y: auto; }
-  h2 { margin: var(--s-8) 0 0; font-size: var(--fs-18); }
   .help, .state { margin: 0; color: var(--muted); }
   .state { font-size: var(--fs-12); min-height: 18px; }
   progress { width: 100%; accent-color: var(--green); }
   .switch, .choice { display: flex; align-items: center; gap: var(--s-8); min-height: var(--control); font-weight: 600; }
   .switch input, .choice input { flex: none; width: 20px; height: 20px; accent-color: var(--green); }
-  .grow { flex: 1; }
   .error { margin: 0; color: var(--danger); }
   @media (max-width: 900px) { .ocr { grid-template-columns: 1fr; grid-template-rows: 1fr auto; } .side { border-inline-start: 0; border-top: 1px solid var(--line); } }
 </style>

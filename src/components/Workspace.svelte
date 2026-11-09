@@ -60,7 +60,7 @@
   $effect(() => { pageInput = String(current); });
   const tasks: Key[] = ['view', 'organize', 'edit', 'convert', 'sign', 'protect', 'redact', 'forms', 'ocr', 'comment'];
   // narrow windows: the four rarest tasks go under "More ▾" (the desktop app needs room for its window buttons)
-  let width = $state(1366), moreOpen = $state(false), taskOpen = $state(false);
+  let width = $state(1366), moreOpen = $state(false), taskOpen = $state(false), zoomOpen = $state(false);
   const compact = $derived(width < (isDesktop ? 1360 : 1240)), shown = $derived(compact ? tasks.slice(0, 6) : tasks), hidden = $derived(compact ? tasks.slice(6) : []);
   const pending = $derived(organized || commented);
 
@@ -98,7 +98,7 @@
   <header class="bar" data-tauri-drag-region>
     <img src="/brand-mark.svg" alt="" width="28" height="28" />
     <FileName {name} fill={false} />
-    {#if modified || pending}<span class="mod" title={t('modified')}><span class="dot"></span><span class="sr">{t('modified')}</span></span>{/if}
+    <span class="mod" title={modified || pending ? t('modified') : undefined}>{#if modified || pending}<span class="dot"></span><span class="sr">{t('modified')}</span>{/if}</span>
     {#if view.phone}
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <nav class="tasks phone" aria-label={t('tasksMenu')} onfocusout={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) taskOpen = false; }} onkeydown={(e) => { if (e.key === 'Escape') taskOpen = false; }}>
@@ -208,10 +208,24 @@
       <span class="num muted">{t('of')} {sizes.length}</span>
     </form>
     <span class="sep"></span>
+    {#if width < 600}
+      <span class="zoommenu" role="presentation" onfocusout={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) zoomOpen = false; }} onkeydown={(e) => { if (e.key === 'Escape') zoomOpen = false; }}>
+        <button class="btn" aria-expanded={zoomOpen} aria-haspopup="menu" onclick={() => (zoomOpen = !zoomOpen)}>{t('zoom')} ▾</button>
+        {#if zoomOpen}
+          <div class="moremenu" role="menu">
+            <button class="task" role="menuitem" onclick={() => { zoomOpen = false; viewer.zoomBy(1.25); }}>{t('zoomIn')}</button>
+            <button class="task" role="menuitem" onclick={() => { zoomOpen = false; viewer.zoomBy(0.8); }}>{t('zoomOut')}</button>
+            <button class="task" role="menuitem" onclick={() => { zoomOpen = false; viewer.zoomTo('width'); }}>{t('fitWidth')}</button>
+            <button class="task" role="menuitem" onclick={() => { zoomOpen = false; viewer.zoomTo('page'); }}>{t('fitPage')}</button>
+          </div>
+        {/if}
+      </span>
+    {:else}
     <button class="btn icon" onclick={() => viewer.zoomBy(0.8)} title={t('zoomOut')} aria-label={t('zoomOut')}>−</button>
     <button class="btn" onclick={() => viewer.zoomTo('width')}>{t('fitWidth')}</button>
     <button class="btn" onclick={() => viewer.zoomTo('page')}>{t('fitPage')}</button>
     <button class="btn icon" onclick={() => viewer.zoomBy(1.25)} title={t('zoomIn')} aria-label={t('zoomIn')}>+</button>
+    {/if}
     <span class="find" class:open={findOpen}>
       <button class="btn icon" onclick={() => { findOpen = !findOpen; if (findOpen) setTimeout(() => findInput?.focus()); }} title={t('find')} aria-label={t('find')}>{@html icon('search')}</button>
       {#if findOpen}
@@ -240,7 +254,8 @@
   .bar { display: flex; align-items: center; gap: var(--s-8); padding: var(--s-8) var(--s-16); background: var(--surface); border-bottom: 1px solid var(--line); min-width: 0; }
   :global(html[data-desktop]) .bar { padding-right: 156px; } /* room for the window buttons in the corner */
   .grow { flex: 1 1 0; min-width: 0; align-self: stretch; }
-  .mod { display: flex; flex: none; }
+  .mod { display: flex; flex: none; width: 10px; } /* its room is always kept, so the tabs never move */
+  .zoommenu { position: relative; display: flex; }
   .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--green); }
   .tasks { display: flex; flex: 0 0 auto; gap: var(--s-8); margin-inline-start: var(--s-8); }
   .morewrap { position: relative; display: flex; }
@@ -262,7 +277,7 @@
   .body.nothumbs { grid-template-columns: 1fr; }
   main { min-width: 0; min-height: 0; }
   @media (max-width: 720px) { .body { grid-template-columns: 1fr; } .body :global(.thumbs) { display: none; } }
-  @media (max-width: 600px) { .bar { gap: var(--s-8); padding-inline: var(--s-12); } .bar > img { flex: none; } .tools { flex-wrap: wrap; gap: var(--s-8); padding-inline: var(--s-12); } .find { margin-inline-start: 0; } .find input { width: 140px; } }
+  @media (max-width: 600px) { .bar { gap: var(--s-8); padding-inline: var(--s-12); } .bar > img { flex: none; } .bar :global(.wrap:has(> .name)) { flex: 0 1 auto; min-width: 0; } .tasks { flex: 0 1 auto; min-width: 0; } .tools { flex-wrap: wrap; gap: var(--s-8); padding-inline: var(--s-12); } .find { margin-inline-start: 0; } .find input { width: 140px; } }
   .tasks.phone { position: relative; margin-inline-start: 0; }
   .tasks.phone > .task { background: var(--green-soft); }
 </style>
