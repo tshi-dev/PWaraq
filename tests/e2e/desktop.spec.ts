@@ -9,7 +9,7 @@ import { open, fixture } from './helpers';
 const audit = fs.readFileSync(path.join(import.meta.dirname, '..', '..', 'tools', 'ui-audit.js'), 'utf8');
 const stub = (updateVersion?: string) => {
   const calls: string[] = []; (window as any).tauriCalls = calls;
-  const win = { isMaximized: async () => calls.includes('toggleMaximize'), onResized: () => {}, minimize: () => calls.push('minimize'), toggleMaximize: () => calls.push('toggleMaximize'), close: () => calls.push('close') };
+  const win = { isMaximized: async () => calls.includes('toggleMaximize'), onResized: () => {}, onCloseRequested: async () => () => {}, minimize: () => calls.push('minimize'), toggleMaximize: () => calls.push('toggleMaximize'), close: () => calls.push('close') };
   // commands the start screen calls: app_started (rollback note or null), check_update (an update or null), download_update
   const invoke = async (cmd: string) => { if (cmd.endsWith('_update')) calls.push(cmd); return cmd === 'check_update' ? (updateVersion ? { version: updateVersion, notes: '' } : null) : cmd === 'app_started' ? null : []; };
   (window as any).__TAURI__ = { core: { invoke }, event: { listen: async () => () => {} }, dialog: {}, window: { getCurrentWindow: () => win } };

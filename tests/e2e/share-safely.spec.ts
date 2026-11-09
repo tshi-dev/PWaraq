@@ -95,3 +95,19 @@ test('share safely: a file opened with only its open password keeps that passwor
   expect(d.authenticatePassword('pw')).toBeGreaterThan(0);
   expect(d.asPDF()!.loadPage(0).getAnnotations().length).toBe(0);
 });
+
+test('share safely: a file with limits opened without its owner password is checked but offers no fixes', async ({ page }, info) => {
+  test.setTimeout(150_000);
+  const plain = fs.readFileSync(risky(info.outputPath('risky-lim.pdf')));
+  const limited = info.outputPath('risky-limited.pdf');
+  fs.writeFileSync(limited, m.Document.openDocument(plain, 'application/pdf').asPDF()!.saveToBuffer('encrypt=aes-256,owner-password=own,permissions=' + ((1 << 2) | ~0xfff) + ',garbage').asUint8Array()); // print only, no open password
+  await open(page, limited);
+  await page.getByRole('button', { name: 'Protect' }).click();
+  await page.getByRole('button', { name: 'Check this file' }).click();
+  await expect(page.locator('.sum')).toHaveText('3 things found', { timeout: 30_000 });
+  await expect(page.getByText('This file has limits and you do not have its owner password')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Fix all' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Remove comments' })).toHaveCount(0);
+  await expect(page.locator('.pf').getByRole('button', { name: 'Check again' })).toBeVisible();
+  await clean(page, 'limited');
+});

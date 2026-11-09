@@ -98,11 +98,12 @@
   const scan = () => run(t('chkChecking'), async () => { report = await pool.tool<Finding[]>('checkscan', { bytes: bytes.slice(), password: password ?? '' }); seen = { key: key(), report }; });
   const check = () => { fixed = []; doneIds = []; queue = []; return scan(); };
   const mend = (f: Finding) => run(t('applying'), async () => {
-    const out = await pool.tool('checkfix', { bytes: bytes.slice(), password: password ?? '', kind: f.id });
-    if (f.id === 'size' && out.length >= bytes.length) { note = t('chkNoSmaller'); return; }
-    after = t('chkDone'); fixed = [...fixed, f.id];
-    try { await onReplace(await pool.keep(out), password, 'protect'); } // like Organize: a file opened with only its open password keeps it too
-    catch (e) { after = ''; queue = []; fixed = fixed.filter((x) => x !== f.id); throw e; }
+    try {
+      const out = await pool.tool('checkfix', { bytes: bytes.slice(), password: password ?? '', kind: f.id });
+      if (f.id === 'size' && out.length >= bytes.length) { note = t('chkNoSmaller'); return; }
+      after = t('chkDone'); fixed = [...fixed, f.id];
+      await onReplace(await pool.keep(out), password, 'protect'); // like Organize: a file opened with only its open password keeps it too
+    } catch (e) { after = ''; queue = []; fixed = fixed.filter((x) => x !== f.id); throw e; } // a failed fix also ends Fix all (no stale queue left for a later single fix)
   });
   // Fix all: one fix at a time (each one opens the document again and checks it again), then the next in the queue
   const next = async (): Promise<void> => { const f = issues.find((x) => x.id === queue.shift()); if (f) await mend(f); else if (queue.length) await next(); };
@@ -264,5 +265,5 @@
   label.btn { cursor: pointer; } label.btn.disabled { opacity: 0.5; cursor: not-allowed; }
   .state { margin: 0; color: var(--muted); font-size: var(--fs-12); min-height: 18px; }
   .error { margin: 0; color: var(--danger); }
-  @media (max-width: 900px) { .tools { grid-template-columns: 1fr; grid-template-rows: auto 1fr; } .side { border-inline-start: 0; border-top: 1px solid var(--line); } }
+  @media (max-width: 900px) { .tools { display: block; overflow-y: auto; } .side { overflow: visible; border-inline-start: 0; border-top: 1px solid var(--line); } } /* one scroll for the preview and the options (no small inner scroll on a phone); the footer stays pinned */
 </style>
