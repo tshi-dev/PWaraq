@@ -105,17 +105,17 @@ test('comment: the text typed into a new sticky note is part of making it — on
   await page.mouse.click(box.x + 400 * k, box.y + 200 * k);
   await text.fill('first words');
   await text.blur();
-  await expect(page.locator('.state')).toHaveText('1 comments');
+  await expect(page.locator('.state')).toHaveText('1 comment');
   await undo.click(); // one click: the note is gone, not just its text
-  await expect(page.locator('.state')).not.toHaveText('1 comments');
+  await expect(page.locator('.state')).toHaveText('0 comments');
   await expect(undo).toBeDisabled();
   await page.getByRole('button', { name: 'Redo (Ctrl Y)' }).click();
-  await expect(page.locator('.state')).toHaveText('1 comments');
+  await expect(page.locator('.state')).toHaveText('1 comment');
   // changing the text of the existing note later is a separate step
   await page.mouse.click(box.x + 410 * k, box.y + 210 * k);
   await text.fill('changed later');
   await text.blur();
   await undo.click();
-  await expect(page.locator('.state')).toHaveText('1 comments');
+  await expect(page.locator('.state')).toHaveText('1 comment');
   await expect(text).toHaveValue('first words');
 });

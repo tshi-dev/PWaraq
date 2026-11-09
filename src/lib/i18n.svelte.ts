@@ -369,7 +369,7 @@ const strings = {
   cDelete: ['Delete comment', 'احذف التعليق'],
   cDefaultText: ['Text', 'نص'],
   cNone: ['Click a comment to change its colour, text or size.', 'انقر تعليقًا لتغيير لونه أو نصه أو حجمه.'],
-  cCount: ['comments', 'تعليقات'],
+  cCountOne: ['comment', 'تعليق'], cCount: ['comments', 'تعليقات'],
   // recovery
   restoreFrom: ['Restore your unsaved work from {time}', 'استعد عملك غير المحفوظ من {time}'],
   restoreHelp: ['Waraq did not close normally last time. “{name}” was kept on this device.', 'لم يُغلق ورق بشكل طبيعي في المرة الماضية. حُفظ «{name}» على هذا الجهاز.'],

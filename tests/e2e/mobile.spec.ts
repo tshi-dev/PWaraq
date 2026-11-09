@@ -131,3 +131,19 @@ for (const lang of ['en', 'ar'] as const) for (const task of ['Comment', 'Edit']
   await page.screenshot({ path: info.outputPath(`${task.toLowerCase()}-390-${lang}-sheet.png`) });
   await ctx.close();
 });
+
+// Tablets and small windows (600–1000 px): the workspace bar never pushes Save, Close or the menus off the screen
+for (const lang of ['en', 'ar'] as const) test(`window widths 990 to 640 (${lang}): every workspace bar button is on screen`, async ({ browser }, info) => {
+  const ctx = await browser.newContext({ viewport: { width: 990, height: 800 }, locale: lang === 'ar' ? 'ar-SA' : 'en-US', baseURL: info.project.use.baseURL });
+  await ctx.addInitScript((l) => localStorage.setItem('waraq-lang', l), lang);
+  const page = await ctx.newPage();
+  await page.goto('/');
+  await page.locator('input[type=file]').first().setInputFiles(fixture('small.pdf'));
+  await expect(page.locator('.page').first()).toBeVisible({ timeout: 60_000 });
+  for (const w of [990, 900, 820, 700, 640]) {
+    await page.setViewportSize({ width: w, height: 800 });
+    await page.waitForTimeout(150);
+    expect((await fits(page)).out, `off screen at ${w} px`).toEqual([]);
+  }
+  await ctx.close();
+});

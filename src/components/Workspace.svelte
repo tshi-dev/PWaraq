@@ -65,6 +65,7 @@
   // narrow windows: the four rarest tasks go under "More ▾" (the desktop app needs room for its window buttons)
   let width = $state(1366), moreOpen = $state(false), taskOpen = $state(false), zoomOpen = $state(false);
   const compact = $derived(width < (isDesktop ? 1360 : 1240)), shown = $derived(compact ? tasks.slice(0, 6) : tasks), hidden = $derived(compact ? tasks.slice(6) : []);
+  const slim = $derived(view.narrow || width < (isDesktop ? 1160 : 1000)); // below this the whole bar does not fit: one task menu and the Save + More pair, as on a phone
   const pending = $derived(organized || commented);
 
   // Find: every page is searched in the background (heavy pages take seconds); matches appear as they come in.
@@ -102,7 +103,7 @@
     <img src="/brand-mark.svg" alt="" width="28" height="28" />
     <FileName {name} fill={false} />
     <span class="mod" title={modified || pending ? t('modified') : undefined}>{#if modified || pending}<span class="dot"></span><span class="sr">{t('modified')}</span>{/if}</span>
-    {#if view.phone}
+    {#if slim}
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <nav class="tasks phone" aria-label={t('tasksMenu')} onfocusout={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) taskOpen = false; }} onkeydown={(e) => { if (e.key === 'Escape') taskOpen = false; }}>
       <button class="task on" aria-expanded={taskOpen} aria-haspopup="menu" disabled={applying} onclick={() => (taskOpen = !taskOpen)}>{t(mode)} ▾</button>
@@ -134,7 +135,7 @@
     </nav>
     {/if}
     <span class="grow" data-tauri-drag-region></span>
-    {#if view.phone}
+    {#if slim}
     <span class="end">
       <SaveMenu {pool} {bytes} {name} {password} compact disabled={applying} primary={modified} saveOff={(mode === 'edit' && editScope === 'page') || mode === 'sign'} canShrink={!pending && mode !== 'sign' && !(mode === 'edit' && editScope === 'page')}
         onSave={() => save()} onSaveAs={() => save(true)} />

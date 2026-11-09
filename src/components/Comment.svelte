@@ -13,7 +13,7 @@
   import { view } from '../lib/device.svelte';
 
   let { pool, sizes, bytes, password, changed = $bindable(false) }: { pool: EnginePool; sizes: { w: number; h: number }[]; bytes: Uint8Array; password?: string; changed?: boolean } = $props();
-  const W0 = 720; let W = $state(Math.min(W0, innerWidth - 24)); /* a phone starts with the page as wide as the screen */ const widest = $derived(Math.max(...sizes.map((s) => s.w))), k = (_: number) => W / widest /* one scale for every page: W is the widest page's width */;
+  const W0 = 720; let W = $state(Math.min(W0, innerWidth - (view.narrow ? 24 : 388))); /* a phone starts with the page as wide as the screen; a small window with it as wide as the room beside the 340 px panel */ const widest = $derived(Math.max(...sizes.map((s) => s.w))), k = (_: number) => W / widest /* one scale for every page: W is the widest page's width */;
   type Tool = 'select' | Kind;
   // the tool strip: Select, then Mark text / Draw / Notes (tool, label, icon)
   const GROUPS: [Key | null, [Tool, Key, string][]][] = [
@@ -228,7 +228,7 @@
 {#snippet history()}
   <button class="btn icon" onclick={undo} disabled={!past.length} title={t('undo')} aria-label={t('undo')}>{@html icon('undo')}</button>
   <button class="btn icon" onclick={redo} disabled={!future.length} title={t('redo')} aria-label={t('redo')}><span class="flip">{@html icon('undo')}</span></button>
-  <span class="state">{count} {t('cCount')}</span>
+  <span class="state">{count} {t(count === 1 ? 'cCountOne' : 'cCount')}</span>
 {/snippet}
 
 {#snippet options()}

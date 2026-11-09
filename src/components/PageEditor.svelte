@@ -411,7 +411,7 @@
     {#if view.narrow}
       <Sheet label={t('options')} bind:open={sheetOpen}>
         {#snippet bar()}
-          <button class="btn icon" onclick={onCancel} disabled={!!busy && doc >= 0} >{t('cancel')}</button>
+          <button class="btn" onclick={onCancel} disabled={!!busy && doc >= 0}>{t('cancel')}</button>
           <button class="btn primary" onclick={save} disabled={!!busy}>{@html icon('check')}{t('savePage')}</button>
         {/snippet}
         {@render panel()}
