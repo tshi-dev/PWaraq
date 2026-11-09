@@ -68,7 +68,7 @@
   let findOpen = $state(false), query = $state(''), hits = $state<{ page: number; rects: number[][] }[]>([]), active = $state(0), searching = $state(false);
   let findInput = $state<HTMLInputElement>(), searchRun = 0, findTimer: ReturnType<typeof setTimeout>;
   async function search(q: string) {
-    const run = ++searchRun; hits = []; active = 0; viewer.showHits([], 0);
+    const run = ++searchRun; hits = []; active = 0; viewer?.showHits([], 0);
     if (q.trim().length < 2) return;
     searching = true;
     await Promise.all(sizes.map(async (_, page) => {
@@ -77,12 +77,12 @@
         if (run !== searchRun || !found.length) return;
         const add = found.map((quads) => ({ page, rects: quads.map((q) => { const xs = [q[0], q[2], q[4], q[6]], ys = [q[1], q[3], q[5], q[7]]; return [Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)]; }) }));
         hits = [...hits, ...add].sort((a, b) => a.page - b.page);
-        viewer.showHits(hits, active);
+        viewer?.showHits(hits, active);
       } catch {}
     }));
     if (run === searchRun) searching = false;
   }
-  function step(d: number) { if (!hits.length) return; active = (active + d + hits.length) % hits.length; viewer.showHits(hits, active); }
+  function step(d: number) { if (!hits.length) return; active = (active + d + hits.length) % hits.length; viewer?.showHits(hits, active); }
 
   function onKey(e: KeyboardEvent) {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); return; }

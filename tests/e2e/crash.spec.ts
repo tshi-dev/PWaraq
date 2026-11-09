@@ -15,9 +15,8 @@ const entries = (page: Page) => page.evaluate(async () => {
 });
 // this run logs an error, then "dies" (its id stays in the list): the next start is a real crash and the dialog asks
 async function crashed(page: Page, message = 'boom') {
-  const before = (await entries(page)).length;
   await page.evaluate((m) => { setTimeout(() => { throw new Error(m); }); }, message);
-  await expect.poll(async () => (await entries(page)).length).toBe(before + 1);
+  await expect.poll(async () => (await entries(page)).some((e) => e.includes(`"message":"${message}"`))).toBe(true); // the start may still be writing its own entry: no counting
   await page.evaluate(DEAD);
 }
 const outside = (page: Page) => { const urls: string[] = []; page.on('request', (r) => { if (!/^(http:\/\/localhost|data:|blob:)/.test(r.url())) urls.push(r.url()); }); return urls; };
