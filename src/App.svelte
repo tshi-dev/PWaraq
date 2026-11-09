@@ -10,7 +10,7 @@
   import { newPortfolio, load, parse, PortfolioError, type Portfolio as PortfolioData } from './lib/portfolio';
   import { unzip } from './lib/zip';
   import { saveDraft, listDrafts, readDraft, dropDraft, EVERY, type Draft } from './lib/drafts';
-  import { startSession } from './lib/session';
+  import { startSession, endSession } from './lib/session';
   import { uid, isImage, addFiles, toItems } from './lib/pages';
   import Notice from './components/Notice.svelte';
   import IosHint from './components/IosHint.svelte';
@@ -20,7 +20,7 @@
   import type { Entry } from './lib/crashreport';
   import type { Health } from './lib/engine/pool';
   import { CONVERTIBLE_ACCEPT, isConvertible, toPdf } from './lib/convert';
-  import { isDesktop, onOpenPaths, readPath, writePath, saveAs, baseName } from './lib/desktop';
+  import { isDesktop, onOpenPaths, readPath, writePath, saveAs, baseName, appWindow } from './lib/desktop';
   import TitleBar from './components/TitleBar.svelte';
   import PackPrompt from './components/PackPrompt.svelte';
   import { update, version, started, check as checkUpdate, restart } from './lib/update.svelte';
@@ -84,6 +84,7 @@
     });
     const every = setInterval(keepDraft, EVERY);
     if (isDesktop) onOpenPaths(async ([p]) => openFile(await readPath(p), undefined, p));
+    if (isDesktop) appWindow().onCloseRequested(() => endSession()); // ✕, Alt+F4 or the task bar: a clean exit is written before the window goes
     started();
     return () => clearInterval(every);
   });
