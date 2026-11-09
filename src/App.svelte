@@ -92,8 +92,10 @@
       crashes = (await crash.entries()).length;
     });
     const every = setInterval(keepDraft, EVERY);
-    if (isDesktop) onOpenPaths(async ([p]) => openFile(await readPath(p), undefined, p));
-    if (isDesktop) appWindow().onCloseRequested(() => endSession()); // ✕, Alt+F4 or the task bar: a clean exit is written before the window goes
+    try { // a failing desktop call must not stop the update check below
+      if (isDesktop) onOpenPaths(async ([p]) => openFile(await readPath(p), undefined, p));
+      if (isDesktop) appWindow().onCloseRequested(() => endSession()); // ✕, Alt+F4 or the task bar: a clean exit is written before the window goes
+    } catch { /* the app still works without them */ }
     started();
     return () => clearInterval(every);
   });

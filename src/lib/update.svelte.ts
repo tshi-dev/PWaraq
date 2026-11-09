@@ -17,7 +17,8 @@ export const update = $state({
 /** Tells the shell the page is up (this version is good) and picks up a rollback note from the last start. */
 export async function started() {
   if (!isDesktop) return;
-  const note: string | null = await tauri!.core.invoke('app_started');
+  let note: string | null = null;
+  try { note = await tauri!.core.invoke('app_started'); } catch { /* the daily check still runs */ }
   if (typeof note === 'string' && note.includes('\n')) { const [failed, back] = note.split('\n'); update.rolledBack = { failed, back }; }
   if (Date.now() - Number(localStorage.getItem(KEY) || 0) > DAY) check();
 }

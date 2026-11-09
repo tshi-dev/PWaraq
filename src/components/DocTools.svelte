@@ -2,6 +2,7 @@
   // set before a fix reloads the document (the workspace is built again): the new workspace checks the file again and says so
   let after = '';
   // across the reload a fix causes: the ids fixed so far (they keep a done tick), the ids "Fix all" still has to do, and the last scan (kept while the person looks at a page)
+  import { fingerprint } from '../lib/fingerprint';
   import type { Finding } from '../lib/engine/checkshare';
   let fixed: string[] = [], queue: string[] = [], seen: { key: string; report: Finding[] } | null = null;
 </script>
@@ -94,7 +95,7 @@
   const SAFE = ['fake', 'meta', 'comments', 'files', 'script']; // fixes that lose nothing the person wants and do not clash; clearing answers, bookmarks and a smaller copy stay one by one
   const fixable = $derived(issues.filter((f) => f.fix && SAFE.includes(f.id)));
   const ICON: Record<string, string> = { fake: 'redact', white: 'eye', outside: 'extract', tiny: 'search', invisible: 'eye', ocr: 'ocr', meta: 'metadata', comments: 'annotate', forms: 'forms', files: 'link', script: 'warning', layers: 'layers', bookmarks: 'bookmarks', size: 'compress' };
-  const key = () => name + ':' + bytes.length;
+  const key = () => name + ':' + bytes.length + ':' + fingerprint(bytes);
   const scan = () => run(t('chkChecking'), async () => { report = await pool.tool<Finding[]>('checkscan', { bytes: bytes.slice(), password: password ?? '' }); seen = { key: key(), report }; });
   const check = () => { fixed = []; doneIds = []; queue = []; return scan(); };
   const mend = (f: Finding) => run(t('applying'), async () => {
