@@ -268,6 +268,7 @@ const strings = {
   needOwner: ['This file has limits. Only its owner password can remove or change them.', 'هذا الملف عليه قيود. كلمة مرور المالك وحدها تزيلها أو تغيّرها.'],
   needsPassword: ['This file is protected. Enter its password to open', 'هذا الملف محمي. أدخل كلمة مروره لفتح'],
   wrongPassword: ['Wrong password.', 'كلمة المرور غير صحيحة.'],
+  openPwAsk: ['That is the owner password. Also type the open password: copies you save keep it.', 'هذه كلمة مرور المالك. اكتب أيضًا كلمة مرور الفتح: تحتفظ بها النسخ التي تحفظها.'],
   toolFailed: ['That did not work on this file.', 'تعذّر تنفيذ ذلك على هذا الملف.'],
   // portfolio: cover, designs, paper pages, sections
   cover: ['Cover page', 'صفحة الغلاف'],

@@ -30,7 +30,7 @@
   const previous = crash.previousRun(); // what the run before this one was doing, read before this run starts overwriting it
   crash.install();
   const pool = new EnginePool();
-  let doc = $state<{ name: string; sizes: { w: number; h: number }[]; bytes: Uint8Array; modified: boolean; password?: string; path?: string; task?: Key; extra?: File[] } | null>(null);
+  let doc = $state<{ name: string; sizes: { w: number; h: number }[]; bytes: Uint8Array; modified: boolean; password?: string; open?: string; path?: string; task?: Key; extra?: File[] } | null>(null);
   let openedPath: string | undefined; // desktop: the file on disk behind `doc`, so Save writes straight back
   let portfolio = $state<PortfolioData | null>(null);
   let busy = $state(false), error = $state(''), over = $state(false), recent = $state<Recent[]>([]), again = $state(false);
@@ -84,7 +84,8 @@
       // an unclean exit alone (a closed browser, a discarded tab, a power cut) is only noted on the start screen; with an
       // error logged in that run, or a Rust panic, it is a crash and the dialog asks
       const fresh = (await crash.entries()).filter((e) => !e.seen), exits = fresh.filter((e) => e.kind === 'unclean');
-      const loud = [...fresh.filter((e) => e.kind === 'panic'), ...(exits.length ? [...fresh.filter((e) => e.kind === 'error' || e.kind === 'rejection' || e.kind === 'worker'), ...exits] : [])];
+      const errors = fresh.filter((e) => e.kind === 'error' || e.kind === 'rejection' || e.kind === 'worker');
+      const loud = [...fresh.filter((e) => e.kind === 'panic'), ...(exits.length && errors.length ? [...exits, ...errors] : [])]; // the exit first: its log shows the errors
       if (loud.length && crash.askFirst()) report = loud; else crash.markSeen(loud);
       crash.markSeen(fresh.filter((e) => !loud.includes(e))); // errors of runs that ended well are not brought up later
       quietExit = exits.length > 0 && !loud.length;
@@ -98,15 +99,15 @@
   });
 
   class Damaged { pages: number; constructor(pages: number) { this.pages = pages; } }
-  async function show(bytes: Uint8Array, name: string, modified = false, password?: string, repairedOk = false) {
+  async function show(bytes: Uint8Array, name: string, modified = false, password?: string, repairedOk = false, open?: string) {
     await setDocument(bytes);
     crash.note(`open: ${(bytes.length / 2 ** 20).toFixed(1)} MB`); // the next "unclean exit" entry shows what was being opened
-    const sizes = await pool.open(bytes, password);
+    const sizes = await pool.open(bytes, password, open);
     crash.note(`opened: ${sizes.length} pages`);
     if (pool.repaired && !repairedOk) throw new Damaged(sizes.length); // asked first: "Open what could be read"
     if (!(doc?.name === name && modified)) { draftId = uid(); kept = null; } // a change to the open document keeps its draft; anything else starts a new one
     doc = null; portfolio = null; await tick(); // a new document gets a fresh workspace
-    doc = { name, sizes, bytes, modified, password, path: openedPath, task: want, extra }; want = undefined; extra = [];
+    doc = { name, sizes, bytes, modified, password, open, path: openedPath, task: want, extra }; want = undefined; extra = [];
     keepDraft();
   }
   // a damaged PDF MuPDF could still read: shown on the start screen until the person chooses
@@ -123,14 +124,22 @@
   }
   // a password-protected PDF: asked for on the start screen, then opened with it
   let locked = $state<{ bytes: Uint8Array; name: string; size: number; handle?: FileSystemFileHandle; path?: string } | null>(null), typed = $state('');
+  // typed the owner password of a file that also has an open password: the open password is asked too, so saved copies keep
+  // it (the owner password must never become the open password of a copy, and it cannot be read back from the file)
+  let askOpen = $state(false), openTyped = $state(''), openField = $state<HTMLInputElement>();
+  const unlocked = () => { locked = null; typed = ''; askOpen = false; openTyped = ''; };
   async function unlockOpen(e: SubmitEvent) {
     e.preventDefault();
     if (!locked) return;
     busy = true; error = '';
     try {
-      const l = locked;
-      await show(l.bytes, l.name, false, typed);
-      locked = null; typed = '';
+      const l = locked, guard = (current: string) => pool.tool<{ owner: boolean; open: boolean } | null>('guard', { bytes: l.bytes.slice(), current });
+      if (!askOpen) {
+        const g = await guard(typed);
+        if (g?.owner && !g.open) { askOpen = true; busy = false; await tick(); openField?.focus(); return; }
+      } else if (!(await guard(openTyped))?.open) throw new Error('WRONG_OPEN');
+      await show(l.bytes, l.name, false, typed, false, askOpen ? openTyped : undefined);
+      unlocked();
       remember({ key: `pdf:${l.name}:${l.size}`, kind: 'pdf', name: l.name, pages: doc!.sizes.length, handle: l.handle, path: l.path, thumb: await cover() });
     } catch (e) { error = why(e, 'wrongPassword'); }
     busy = false;
@@ -278,7 +287,7 @@
 
 {#if doc}
   <Workspace {pool} sizes={doc.sizes} name={doc.name} bytes={doc.bytes} modified={doc.modified} password={doc.password} task={doc.task} extra={doc.extra} onOpen={plain} onClose={close} onSave={() => save()} onSaveAs={() => save(true)}
-    onReplace={(bytes, pw, next) => { if (next) want = next; return show(bytes, doc!.name, true, pw); }} />
+    onReplace={(bytes, pw, next) => { if (next) want = next; return show(bytes, doc!.name, true, pw, false, doc!.open); }} />
 {:else if portfolio}
   <Portfolio {pool} {portfolio} onClose={close} />
 {:else}
@@ -300,8 +309,12 @@
         <form class="lock" onsubmit={unlockOpen}>
           <label for="pdfpw">{@html icon('protect')}{t('needsPassword')} <strong>{locked.name}</strong></label>
           <span><input id="pdfpw" type="password" bind:value={typed} autocomplete="off" />
-          <button class="btn primary" disabled={busy || !typed}>{t('openShort')}</button>
-          <button type="button" class="btn" onclick={() => { locked = null; typed = ''; error = ''; }}>{t('cancel')}</button></span>
+          <button class="btn primary" disabled={busy || !typed || (askOpen && !openTyped)}>{t('openShort')}</button>
+          <button type="button" class="btn" onclick={() => { unlocked(); error = ''; }}>{t('cancel')}</button></span>
+          {#if askOpen}
+            <label for="pdfopen" class="muted">{t('openPwAsk')}</label>
+            <input id="pdfopen" type="password" bind:value={openTyped} bind:this={openField} autocomplete="off" />
+          {/if}
         </form>
       {/if}
       {#if damaged}

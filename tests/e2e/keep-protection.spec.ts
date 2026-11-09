@@ -15,13 +15,21 @@ async function openLocked(page: Page, file: string, pw: string) {
   await page.locator('input[type=file]').first().setInputFiles(file);
   await page.locator('#pdfpw').fill(pw);
   await page.locator('.lock').getByRole('button', { name: 'Open' }).click();
+  if (pw === 'own') { // the owner password: the open password is asked too, so copies keep it
+    await page.locator('#pdfopen').fill('own'); // the owner password again is not accepted as the open password
+    await page.locator('.lock').getByRole('button', { name: 'Open' }).click();
+    await expect(page.getByText('Wrong password.')).toBeVisible();
+    await page.locator('#pdfopen').fill('pw');
+    await page.locator('.lock').getByRole('button', { name: 'Open' }).click();
+  }
   await expect(page.locator('.page').first()).toBeVisible({ timeout: 60_000 });
 }
 const stillLocked = (b: Uint8Array, pages: number) => {
   const d = pdf(b);
   expect(d.needsPassword()).toBe(true);
   expect(d.authenticatePassword('wrong')).toBe(0);
-  expect(d.authenticatePassword('own')).toBeGreaterThan(0); // the password typed to open it
+  expect(d.authenticatePassword('own')).toBe(4); // the owner password stays the owner's, and only that
+  expect(d.authenticatePassword('pw')).toBe(2); // the open password people were given still opens it
   const P = d.asPDF()!.getTrailer().get('Encrypt').get('P').asNumber(); // read from the file: the owner password would grant everything
   expect(P & (1 << 4)).toBe(0); // copy off
   expect(P & (1 << 2)).not.toBe(0); // print on

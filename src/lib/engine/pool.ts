@@ -26,7 +26,7 @@ export class EnginePool {
   private replies = new Map<number, Waiting>();
   private nextId = 1;
   private nextDoc = 1;
-  private sources = new Map<number, { bytes: Uint8Array; mime: string; password?: string }>(); // to open them again in a restarted worker
+  private sources = new Map<number, { bytes: Uint8Array; mime: string; password?: string; open?: string }>(); // to open them again in a restarted worker; open: the open password typed with an owner password
   sizes: { w: number; h: number }[] = [];
   repaired = false; // the last opened document needed MuPDF's repair (damaged file)
   onHealth?: (h: Health) => void;
@@ -107,10 +107,11 @@ export class EnginePool {
   }
 
   /** Opens the document as source 0 in every worker (each keeps its own copy), forgetting all other sources. */
-  async open(bytes: Uint8Array, password?: string) {
+  async open(bytes: Uint8Array, password?: string, open?: string) {
     if (!workersFor(bytes.length, 1, this.memoryGB)) throw new Error('TOO_LARGE'); // before the open document is let go
     await this.reset();
     this.sizes = await this.load(0, bytes, 'application/pdf', password);
+    this.sources.get(0)!.open = open;
     return this.sizes;
   }
 
@@ -131,7 +132,10 @@ export class EnginePool {
   }
 
   /** A whole-file tool (compress, protect, unlock) on `bytes`, in whichever worker is free. */
-  tool<T = Uint8Array>(op: 'compress' | 'protect' | 'unlock' | 'guard' | 'seal' | 'redact' | 'formfields' | 'fillform' | 'ocrlayer' | 'annotlist' | 'annotapply' | 'checkscan' | 'checkfix' | 'verify' | 'repair' | 'images', args: Record<string, any>) { return this.run<T>({ op, priority: 0, args, any: true }); }
+  tool<T = Uint8Array>(op: 'compress' | 'protect' | 'unlock' | 'guard' | 'seal' | 'redact' | 'formfields' | 'fillform' | 'ocrlayer' | 'annotlist' | 'annotapply' | 'checkscan' | 'checkfix' | 'verify' | 'repair' | 'images', args: Record<string, any>) {
+    if (op === 'compress') args = { open: this.sources.get(0)?.open ?? '', ...args }; // a compressed copy keeps the open document's protection
+    return this.run<T>({ op, priority: 0, args, any: true });
+  }
 
   /** The password the open document was opened with ('' when none). */
   get password() { return this.sources.get(0)?.password ?? ''; }
@@ -139,7 +143,7 @@ export class EnginePool {
   /** `out` (a new copy of the open document) with the document's own protection: same algorithm, password and limits. */
   keep(out: Uint8Array) {
     const s = this.sources.get(0);
-    return s ? this.tool('seal', { bytes: out, src: s.bytes.slice(), current: s.password ?? '' }) : Promise.resolve(out);
+    return s ? this.tool('seal', { bytes: out, src: s.bytes.slice(), current: s.password ?? '', open: s.open ?? '' }) : Promise.resolve(out);
   }
 
   /** A new PDF from pages of the open sources. */

@@ -13,6 +13,13 @@ const entries = (page: Page) => page.evaluate(async () => {
   try { const d = await (await (await navigator.storage.getDirectory()).getDirectoryHandle('vault')).getDirectoryHandle('crash-log'); for await (const [, h] of (d as any).entries()) out.push(await (await h.getFile()).text()); } catch { /* none yet */ }
   return out;
 });
+// this run logs an error, then "dies" (its id stays in the list): the next start is a real crash and the dialog asks
+async function crashed(page: Page, message = 'boom') {
+  const before = (await entries(page)).length;
+  await page.evaluate((m) => { setTimeout(() => { throw new Error(m); }); }, message);
+  await expect.poll(async () => (await entries(page)).length).toBe(before + 1);
+  await page.evaluate(DEAD);
+}
 const outside = (page: Page) => { const urls: string[] = []; page.on('request', (r) => { if (!/^(http:\/\/localhost|data:|blob:)/.test(r.url())) urls.push(r.url()); }); return urls; };
 
 test('a crash is saved by itself, without file names, folders or document text', async ({ page }) => {
@@ -46,8 +53,9 @@ test('after an unclean exit: the dialog shows the exact text; email and GitHub l
   const visited: string[] = [];
   await page.context().route('https://github.com/**', (r) => { visited.push(r.request().url()); r.abort(); }); // the click is allowed to go there; the test does not
   const sent = outside(page);
-  await page.addInitScript(DEAD);
   await page.goto('/');
+  await crashed(page);
+  await page.reload();
   const dialog = page.getByRole('dialog', { name: 'Waraq closed unexpectedly' });
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText('Send a report?');
@@ -55,6 +63,7 @@ test('after an unclean exit: the dialog shows the exact text; email and GitHub l
   await dialog.getByRole('button', { name: 'Preview' }).click();
   const shown = await dialog.locator('pre').innerText();
   expect(shown).toContain('What happened: Waraq closed without a clean exit');
+  expect(shown).toContain('error: boom'); // what went wrong before it closed
   expect(shown).not.toMatch(/three\.pdf|Users/);
   await page.screenshot({ path: info.outputPath('crash-preview-en.png') });
   const mail = new URL((await dialog.getByRole('link', { name: 'Send by email' }).getAttribute('href'))!);
@@ -75,25 +84,28 @@ test('after an unclean exit: the dialog shows the exact text; email and GitHub l
 test('"Don\'t send" and "Always ask" off: no dialog next time, the crash is still in the log and can be copied', async ({ page, context }) => {
   test.setTimeout(120_000);
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-  await page.addInitScript(() => { if (!sessionStorage.getItem('first')) { sessionStorage.setItem('first', '1'); localStorage.setItem('waraq-sessions', JSON.stringify(['crashed-run'])); } });
   await page.goto('/');
+  await crashed(page);
+  await page.reload();
   const dialog = page.getByRole('dialog');
   await dialog.getByRole('checkbox', { name: 'Always ask' }).uncheck();
   await dialog.getByRole('button', { name: 'Don’t send' }).click();
   await expect(dialog).toBeHidden();
-  await page.evaluate(DEAD);
+  await crashed(page, 'boom again');
   await page.reload();
   await expect(page.getByRole('button', { name: 'Open a PDF' })).toBeVisible();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect.poll(async () => (await entries(page)).length).toBe(2); // both crashes were saved
+  await expect.poll(async () => (await entries(page)).length).toBe(4); // both crashes were saved (each: its error and the unclean exit)
   await page.getByRole('button', { name: 'Copy crash report' }).click();
   await expect(page.getByRole('button', { name: 'Copied.' })).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/^Waraq crash report/);
 });
 
 test('the Arabic dialog', async ({ page }, info) => {
-  await page.addInitScript(() => { localStorage.setItem('waraq-lang', 'ar'); localStorage.setItem('waraq-sessions', JSON.stringify(['crashed-run'])); });
+  await page.addInitScript(() => localStorage.setItem('waraq-lang', 'ar'));
   await page.goto('/');
+  await crashed(page);
+  await page.reload();
   const dialog = page.getByRole('dialog', { name: 'أُغلق ورق بشكل غير متوقع' });
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: 'معاينة' }).click();
@@ -101,10 +113,21 @@ test('the Arabic dialog', async ({ page }, info) => {
   await page.screenshot({ path: info.outputPath('crash-ar.png') });
 });
 
+test('an unclean exit alone (a closed browser, a discarded tab): no dialog, a quiet line on the start screen, kept in the log', async ({ page }) => {
+  await page.addInitScript(DEAD);
+  await page.goto('/');
+  await expect(page.getByRole('status').filter({ hasText: 'Waraq did not close normally last time. It is noted in the crash log.' })).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect((await entries(page)).filter((e) => e.includes('"unclean"'))).toHaveLength(1);
+  await page.evaluate(() => { document.dispatchEvent(new Event('visibilitychange')); }); // still visible: stays in the list
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('waraq-sessions')!).length)).toBe(1);
+});
+
 // the desktop program: links go through open_external, the log file is shown for attaching; the folder button reveals the folder
 const desktopStub = () => {
   const calls: { cmd: string; args: any }[] = [], files = new Map<string, Uint8Array>(); (window as any).tauriCalls = calls;
-  const win = { isMaximized: async () => false, onResized: () => {}, minimize() {}, toggleMaximize() {}, close() {} };
+  files.set('crash-log/1-error.json', new TextEncoder().encode(JSON.stringify({ id: '1-error', at: 1, kind: 'error', message: 'boom', log: [] }))); // the run before logged an error
+  const win = { isMaximized: async () => false, onResized: () => {}, onCloseRequested: async () => () => {}, minimize() {}, toggleMaximize() {}, close() {} };
   (window as any).__TAURI__ = {
     core: { invoke: async (cmd: string, args: any, opts: any) => {
       calls.push({ cmd, args: cmd === 'vault_put' ? { path: decodeURIComponent(opts.headers.path) } : args });
@@ -154,9 +177,9 @@ for (const [lang, theme] of COMBOS) test(`design rules hold on the crash dialog 
   test.setTimeout(90_000);
   test.skip(!!process.env.PREVIEW, 'imports the source module');
   await page.addInitScript(([l, th]) => { localStorage.setItem('waraq-lang', l); localStorage.setItem('waraq-theme', th); }, [lang, theme]);
-  await page.addInitScript(DEAD);
   await page.goto('/');
   await page.evaluate(async (bytes) => { const d = await import('/src/lib/drafts.ts'); await d.saveDraft('x1', 'draft.pdf', new Uint8Array(bytes), 3); }, [...fs.readFileSync(fixture('three.pdf'))]);
+  await crashed(page);
   await page.reload(); // the draft exists now: "Your work was restored"
   await expect(page.locator('.banner')).toBeVisible(); // the restore offer comes first; the crash dialog waits
   await expect(page.getByRole('dialog')).toHaveCount(0);

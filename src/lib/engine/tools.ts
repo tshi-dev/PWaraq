@@ -81,7 +81,7 @@ export function watermark(m: typeof MuPDF, out: MuPDF.PDFDocument, fonts: Fonts,
 export type CompressLevel = 'recommended' | 'small';
 /** Smaller file: photos larger than needed are scaled down and saved as JPEG; unused objects removed, streams packed.
  *  Text, vector drawings (CAD lines) and fonts are untouched. Returns the original bytes when nothing got smaller. */
-export function compress(m: typeof MuPDF, bytes: Uint8Array, level: CompressLevel = 'recommended', password = ''): Uint8Array {
+export function compress(m: typeof MuPDF, bytes: Uint8Array, level: CompressLevel = 'recommended', password = '', openPw = ''): Uint8Array {
   const doc = open(m, bytes, password);
   const long = level === 'small' ? 1400 : 2200, quality = level === 'small' ? 55 : 72, seen = new Set<number>();
   const visit = (res: MuPDF.PDFObject) => {
@@ -111,7 +111,7 @@ export function compress(m: typeof MuPDF, bytes: Uint8Array, level: CompressLeve
     });
   };
   for (let i = 0; i < doc.countPages(); i++) visit(doc.findPage(i).getInheritable('Resources'));
-  const g = guardOf(m, bytes, password); // the copy keeps the source's protection
+  const g = knowing(guardOf(m, bytes, password), openPw); // the copy keeps the source's protection
   let smaller: Uint8Array = doc.saveToBuffer('garbage=4,compress,compress-fonts,compress-images' + (g ? ',decrypt' : '')).asUint8Array().slice();
   if (g) smaller = sealLike(m, smaller, g);
   return smaller.length < bytes.length ? smaller : bytes;
@@ -124,31 +124,37 @@ const open = (m: typeof MuPDF, bytes: Uint8Array, password = '') => {
   return doc;
 };
 
-/** How a file is protected: algorithm (as MuPDF names it), permissions, and whether `password` is the owner password. */
-export type Guard = { how: string; perms: number; restricted: boolean; owner: boolean; password: string };
+/** How a file is protected: algorithm (as MuPDF names it), permissions, whether `password` is the owner password, and the
+ *  open password when it is known: '' when the file opens without one, `password` when that also opens it, else null (a file
+ *  opened with only its owner password: the open password cannot be read back from it, AES-256 keeps only a hash). */
+export type Guard = { how: string; perms: number; restricted: boolean; owner: boolean; password: string; open: string | null };
 /** The protection of `bytes` opened with `password`; null when the file is not encrypted. */
 export function guardOf(m: typeof MuPDF, bytes: Uint8Array, password = ''): Guard | null {
   const doc = m.Document.openDocument(bytes, 'application/pdf').asPDF()!, enc = doc.getTrailer().get('Encrypt');
   if (!enc.isDictionary()) return null;
-  const auth = doc.needsPassword() ? doc.authenticatePassword(password) : doc.authenticatePassword('');
+  const needs = doc.needsPassword(), auth = needs ? doc.authenticatePassword(password) : doc.authenticatePassword('');
   const c = enc.get('CF', 'StdCF', 'CFM'), l = enc.get('Length'), cfm = c.isName() ? c.asName() : '', bits = l.isNumber() ? l.asNumber() : 40;
   const how = cfm === 'AESV3' ? 'aes-256' : cfm === 'AESV2' ? 'aes-128' : bits > 40 ? 'rc4-128' : 'rc4-40';
   const perms = enc.get('P').asNumber();
-  return { how, perms, restricted: (perms & FULL) !== FULL, owner: !!(auth & 4), password };
+  return { how, perms, restricted: (perms & FULL) !== FULL, owner: !!(auth & 4), password, open: !needs ? '' : auth & 2 ? password : null };
 }
+/** `g` with the open password the person typed (checked when the file was opened), when the file itself cannot tell it. */
+export const knowing = (g: Guard | null, open = ''): Guard | null => (g && g.open === null && open ? { ...g, open } : g);
 
-/** `out` (unprotected bytes) saved with the same protection as the source: algorithm, user password, permissions.
- *  The owner password stays the source's only when it was the one typed; otherwise nobody knows it, as for any copy. */
+/** `out` (unprotected bytes) saved with the same protection as the source: algorithm, open password, permissions.
+ *  The owner password stays the source's only when it was the one typed; otherwise nobody knows it, as for any copy.
+ *  The owner password never becomes the open password: without the open password the copy is refused (NEED_OPEN_PASSWORD). */
 export function sealLike(m: typeof MuPDF, out: Uint8Array, g: Guard): Uint8Array {
-  if (/,/.test(g.password)) throw new Error('BAD_PASSWORD'); // MuPDF's save options are comma separated
+  if (g.open === null) throw new Error('NEED_OPEN_PASSWORD');
+  if (/,/.test(g.password + g.open)) throw new Error('BAD_PASSWORD'); // MuPDF's save options are comma separated
   const owner = g.owner && g.password ? g.password : Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
   return m.Document.openDocument(out, 'application/pdf').asPDF()!
-    .saveToBuffer(`encrypt=${g.how},user-password=${g.password},owner-password=${owner},permissions=${g.perms},garbage`).asUint8Array().slice();
+    .saveToBuffer(`encrypt=${g.how},user-password=${g.open},owner-password=${owner},permissions=${g.perms},garbage`).asUint8Array().slice();
 }
 
 /** The new copy `out` of the file `src` opened with `password`: protected like the source (Extract, Split, Save as copy). */
-export function sealLikeSource(m: typeof MuPDF, out: Uint8Array, src: Uint8Array, password = ''): Uint8Array {
-  const g = guardOf(m, src, password);
+export function sealLikeSource(m: typeof MuPDF, out: Uint8Array, src: Uint8Array, password = '', openPw = ''): Uint8Array {
+  const g = knowing(guardOf(m, src, password), openPw);
   return g ? sealLike(m, out, g) : out;
 }
 

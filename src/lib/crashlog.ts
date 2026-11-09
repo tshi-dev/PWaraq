@@ -40,6 +40,7 @@ export async function record(kind: Kind, err: { message?: unknown; stack?: unkno
       theme: document.documentElement.dataset.theme ?? 'light', task: previous?.task ?? context.task, job, message,
       stack: typeof err === 'string' ? undefined : cleanStack(err?.stack, context.names) || undefined, log: previous?.log ?? [...log] };
     await vault.put(`${DIR}/${entry.id}.json`, JSON.stringify(entry));
+    note(`${kind}: ${message}`); // if this run then ends without a clean exit, that entry shows what went wrong
     await prune();
   } catch { /* the log must never be the thing that crashes */ }
 }

@@ -154,11 +154,11 @@ const ops: Record<string, (r: Req) => any> = {
   // photos (bytes, mime) as a new PDF, without opening them as sources
   images(r) { return imagesPdf(mupdf, r.files); },
   // whole-file tools (Convert, Protect)
-  compress(r) { return compress(mupdf, r.bytes, r.level, r.current); },
+  compress(r) { return compress(mupdf, r.bytes, r.level, r.current, r.open); },
   protect(r) { return protect(mupdf, r.bytes, r.password, r.print, r.copy, r.current); },
   // protection of the open document, and a new copy `bytes` of it protected the same way (Extract, Split, Save as copy)
-  guard(r) { const g = guardOf(mupdf, r.bytes, r.current); return g && { restricted: g.restricted, owner: g.owner }; },
-  seal(r) { return sealLikeSource(mupdf, r.bytes, r.src, r.current); },
+  guard(r) { const g = guardOf(mupdf, r.bytes, r.current); return g && { restricted: g.restricted, owner: g.owner, open: g.open !== null }; },
+  seal(r) { return sealLikeSource(mupdf, r.bytes, r.src, r.current, r.open); },
   unlock(r) { return unlock(mupdf, r.bytes, r.password); },
   // redaction: boxes of phone numbers / e-mails / a word on a page, and the file with the marked areas removed
   redactfind(r) { const p = source(r.doc).doc.loadPage(r.page); try { return findMatches(p, r.kind, r.query); } finally { p.destroy(); } },

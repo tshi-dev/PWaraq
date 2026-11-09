@@ -67,11 +67,10 @@ test('unsaved work is kept as a draft and offered after an unclean exit; Save re
   await page.reload();
   await expect(page.getByText(/^Restore your unsaved work from /)).toBeVisible();
   await page.screenshot({ path: info.outputPath('restore-en.png') });
-  await expect(page.getByRole('dialog')).toHaveCount(0); // the crash report waits until the work is restored (or discarded)
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.getByRole('button', { name: 'Restore', exact: true }).click();
-  await expect(page.getByRole('dialog')).toContainText('Your work was restored. Send a report?');
-  await page.getByRole('button', { name: 'Don’t send' }).click();
   await expect(page.locator('.page')).toHaveCount(2); // with the page deleted
+  await expect(page.getByRole('dialog')).toHaveCount(0); // an unclean exit with no error logged is no crash report (crash.spec covers one with)
   await expect(page.getByText('Changed — not saved yet')).toBeVisible();
   // saving removes the draft
   await saved(page, () => page.getByRole('button', { name: 'Save' }).first().click());
