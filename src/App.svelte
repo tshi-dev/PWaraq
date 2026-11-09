@@ -57,8 +57,11 @@
   async function copyReport() { if (await crash.copyReport()) { copied = true; setTimeout(() => (copied = false), 3000); } }
   let draftId = uid(), kept: Uint8Array | null = null, closeTimer: ReturnType<typeof setTimeout>;
   pool.onHealth = (h) => {
+    if (h.kind === 'stopped') { crash.record('worker', 'engine stopped after repeated crashes'); notice = t('engineStopped'); health = null; return; } // stays: only a restart helps
     if (h.kind === 'recovered') { crash.record('worker', h.why, h.op); notice = t('recovered'); setTimeout(() => (notice = ''), 8000); health = null; } else health = h.kind === 'slow' ? h : null;
   };
+  // the pool's own refusals say what happened; anything else gets the caller's message
+  const why = (e: unknown, other: Key) => t(({ TOO_LARGE: 'tooLarge', ENGINE_STOPPED: 'engineStopped' } as Record<string, Key>)[(e as Error)?.message] ?? other);
   if (navigator.webdriver) (globalThis as { waraqPool?: EnginePool }).waraqPool = pool; // lets the tests crash the engine on purpose
   async function keepDraft() {
     const d = doc;
@@ -92,7 +95,9 @@
   class Damaged { pages: number; constructor(pages: number) { this.pages = pages; } }
   async function show(bytes: Uint8Array, name: string, modified = false, password?: string, repairedOk = false) {
     await setDocument(bytes);
+    crash.note(`open: ${(bytes.length / 2 ** 20).toFixed(1)} MB`); // the next "unclean exit" entry shows what was being opened
     const sizes = await pool.open(bytes, password);
+    crash.note(`opened: ${sizes.length} pages`);
     if (pool.repaired && !repairedOk) throw new Damaged(sizes.length); // asked first: "Open what could be read"
     if (!(doc?.name === name && modified)) { draftId = uid(); kept = null; } // a change to the open document keeps its draft; anything else starts a new one
     doc = null; portfolio = null; await tick(); // a new document gets a fresh workspace
@@ -122,7 +127,7 @@
       await show(l.bytes, l.name, false, typed);
       locked = null; typed = '';
       remember({ key: `pdf:${l.name}:${l.size}`, kind: 'pdf', name: l.name, pages: doc!.sizes.length, handle: l.handle, path: l.path, thumb: await cover() });
-    } catch { error = t('wrongPassword'); }
+    } catch (e) { error = why(e, 'wrongPassword'); }
     busy = false;
   }
 
@@ -149,7 +154,7 @@
         }
         remember({ key: `pdf:${file.name}:${file.size}`, kind: 'pdf', name: file.name, pages: doc!.sizes.length, handle, path, thumb: await cover() });
       }
-    } catch (e) { error = t(!/%PDF-/.test(new TextDecoder('latin1').decode(bytes0.subarray(0, 1024))) ? 'notPdf' : 'notReadable'); }
+    } catch (e) { error = why(e, !/%PDF-/.test(new TextDecoder('latin1').decode(bytes0.subarray(0, 1024))) ? 'notPdf' : 'notReadable'); }
     busy = false;
   }
   // first page, small, for the recent list

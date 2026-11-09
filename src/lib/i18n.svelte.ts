@@ -362,6 +362,8 @@ const strings = {
   recovered: ['Waraq recovered — nothing was lost.', 'تعافى ورق — لم يضع شيء.'],
   stillWorking: ['Still working — this is taking longer than usual.', 'ما زال يعمل — هذا يستغرق أطول من المعتاد.'],
   undoClose: ['Undo close: {name}', 'تراجع عن الإغلاق: {name}'],
+  engineStopped: ['The engine stopped after crashing several times. Restart Waraq to go on.', 'توقف المحرك بعد أن تعطل عدة مرات. أعد تشغيل ورق للمتابعة.'],
+  tooLarge: ['This file is too large to open on this PC: there is not enough memory.', 'هذا الملف أكبر من أن يُفتح على هذا الجهاز: الذاكرة لا تكفي.'],
   saveStopped: ['Saving was stopped: the new file did not pass the check. Nothing was overwritten, and your document is still open.', 'أُوقف الحفظ: لم ينجح الملف الجديد في الفحص. لم يُستبدل أي شيء، والمستند ما زال مفتوحًا.'],
   damagedPdf: ['“{name}” is damaged. Waraq could read {n} pages of it.', 'الملف «{name}» تالف. استطاع ورق قراءة {n} صفحة منه.'],
   openReadable: ['Open what could be read', 'افتح ما أمكن قراءته'],

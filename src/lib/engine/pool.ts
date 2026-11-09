@@ -5,13 +5,19 @@ import type { Build } from './assemble';
 
 export type Job = { op: string; page?: number; priority: number; args: Record<string, any>; key?: string; any?: boolean };
 type Waiting = Job & { resolve: (v: any) => void; reject: (e: Error) => void; queued?: number; started?: number; w?: number; retried?: boolean };
-// what the app is told: the engine crashed and was restarted, or a job has been running for a long time (or no longer)
-export type Health = { kind: 'recovered'; why: string; op?: string } | { kind: 'slow'; seconds: number } | { kind: 'fine' };
+// what the app is told: the engine crashed and was restarted, or a job has been running for a long time (or no longer),
+// or the engine keeps crashing and was stopped (only a restart of Waraq helps)
+export type Health = { kind: 'recovered'; why: string; op?: string } | { kind: 'slow'; seconds: number } | { kind: 'fine' } | { kind: 'stopped' };
 const DEAD = /abort|out of bounds|unreachable|out of memory|memory access/i; // a WebAssembly engine that hit these cannot be trusted any more
 // ?timing in the address: engine timings are kept in window.engineTimes (for measurements)
 const timing = typeof location !== 'undefined' && location.search.includes('timing');
 export const engineTimes: { op: string; page?: number; key?: string; waitMs: number; workMs: number; at: number }[] = [];
 if (timing) (globalThis as any).engineTimes = engineTimes;
+
+/** How many workers may each hold their own copy of `bytes` of open files (0: too large for this PC).
+ *  shortcut: a copy costs about twice its size in a worker (the file and what MuPDF reads of it), against a quarter of the
+ *  memory the browser reports (`gb`, at most 8); tune it with the file sizes the crash log records. */
+export const workersFor = (bytes: number, max: number, gb: number) => Math.min(max, Math.floor((gb * 2 ** 30) / 4 / (2 * bytes || 1)));
 
 export class EnginePool {
   private workers: Worker[];
@@ -27,11 +33,24 @@ export class EnginePool {
   slowMs = 20_000; // a job running this long gets a Cancel button
   private crashes: number[] = [];
   private watch: ReturnType<typeof setInterval> | undefined;
+  private stopped = false;
+  private size: number;
+  memoryGB: number = (navigator as any).deviceMemory || 4;
 
   // Each worker may hold a heavy page (~800 MB for an A0 CAD sheet): fewer workers on PCs with less memory.
   constructor(size = Math.max(1, Math.min((navigator as any).deviceMemory >= 8 ? 4 : 2, (navigator.hardwareConcurrency || 2) - 1))) {
-    this.workers = []; this.busy = []; this.queues = [];
-    for (let i = 0; i < size; i++) { this.queues.push([]); this.spawn(i); }
+    this.workers = []; this.busy = []; this.queues = []; this.size = size;
+    this.grow();
+  }
+  private grow() { while (this.workers.length < this.size) { this.queues.push([]); this.spawn(this.workers.length); } }
+  /** Fewer workers (big files): the last ones go, with their jobs. */
+  private shrink(n: number) {
+    while (this.workers.length > n) {
+      const w = this.workers.length - 1;
+      this.workers.pop()!.terminate(); this.busy.pop();
+      this.queues.pop()!.forEach((j) => j.reject(new Error('cancelled')));
+      for (const [id, j] of this.replies) if (j.w === w) { this.replies.delete(id); j.reject(new Error('cancelled')); }
+    }
   }
 
   private spawn(i: number) {
@@ -62,23 +81,34 @@ export class EnginePool {
   /** A worker crashed (or its WebAssembly engine aborted): a fresh one takes its place with the same documents, and the
    *  job it was doing is tried once more — a second crash of the same job is reported instead of looping. */
   private async recover(w: number, why: string) {
+    if (this.stopped || !this.workers[w]) return;
     const now = Date.now();
     this.crashes = this.crashes.filter((t) => now - t < 10_000).concat(now);
+    if (this.crashes.length > 3) return this.stop(); // the engine cannot even start: no more restarts
     const lost = [...this.replies].filter(([, j]) => j.w === w);
     for (const [id] of lost) this.replies.delete(id);
     this.workers[w].terminate(); this.spawn(w);
-    const giveUp = this.crashes.length > 3; // the engine cannot even start: stop restarting
     try { await Promise.all([...this.sources].map(([doc, s]) => this.direct(w, 'open', { doc, mime: s.mime, password: s.password, bytes: s.bytes.slice() }))); } catch { /* a source that no longer opens fails its own jobs */ }
     for (const [, j] of lost) {
-      if (j.priority === -1 || j.retried || giveUp) j.reject(new Error('CRASHED'));
+      if (j.priority === -1 || j.retried) j.reject(new Error('CRASHED'));
       else { j.retried = true; this.queues[w].unshift(j); }
     }
     this.onHealth?.({ kind: 'recovered', why, op: lost.find(([, j]) => j.priority !== -1)?.[1].op });
     this.pump(w);
   }
 
+  /** Every worker is ended and every job fails with ENGINE_STOPPED, now and later: the app says "restart Waraq". */
+  private stop() {
+    this.stopped = true;
+    this.workers.forEach((w) => w.terminate());
+    for (const [id, j] of this.replies) { this.replies.delete(id); j.reject(new Error('ENGINE_STOPPED')); }
+    this.queues.forEach((q) => q.splice(0).forEach((j) => j.reject(new Error('ENGINE_STOPPED'))));
+    this.onHealth?.({ kind: 'stopped' });
+  }
+
   /** Opens the document as source 0 in every worker (each keeps its own copy), forgetting all other sources. */
   async open(bytes: Uint8Array, password?: string) {
+    if (!workersFor(bytes.length, 1, this.memoryGB)) throw new Error('TOO_LARGE'); // before the open document is let go
     await this.reset();
     this.sizes = await this.load(0, bytes, 'application/pdf', password);
     return this.sizes;
@@ -89,6 +119,7 @@ export class EnginePool {
     this.queues.forEach((q) => q.splice(0).forEach((j) => j.reject(new Error('cancelled'))));
     // a worker still drawing (a heavy CAD page takes seconds and cannot be interrupted) is replaced, not waited for
     this.sources.clear(); this.nextDoc = 1;
+    if (!this.stopped) this.grow(); // back to all workers after a big file
     await Promise.all(this.workers.map((_, i) => (this.busy[i] ? this.restart(i) : null)));
     await Promise.all(this.workers.map((_, i) => this.direct(i, 'reset', {})));
   }
@@ -118,6 +149,11 @@ export class EnginePool {
   }
 
   private async load(doc: number, bytes: Uint8Array, mime = 'application/pdf', password?: string): Promise<{ w: number; h: number }[]> {
+    let total = bytes.length;
+    for (const s of this.sources.values()) total += s.bytes.length;
+    const fit = workersFor(total, this.workers.length, this.memoryGB);
+    if (!fit) throw new Error('TOO_LARGE');
+    this.shrink(fit); // a copy in every worker would not fit in this PC's memory
     const all = await Promise.all(this.workers.map((_, i) => this.direct(i, 'open', { doc, mime, password, bytes: bytes.slice() })));
     this.sources.set(doc, { bytes, mime, password });
     if (doc === 0) this.repaired = !!all[0].repaired;
@@ -134,6 +170,7 @@ export class EnginePool {
 
   /** Queues a job; a job with the same key replaces the waiting one (e.g. a newer zoom for the same page). */
   run<T = any>(job: Job): Promise<T> {
+    if (this.stopped) return Promise.reject(new Error('ENGINE_STOPPED'));
     // every worker has every source open: a job for `any` worker goes to an idle one; when all are in the middle of
     // a drawing (heavy CAD pages take seconds), one is restarted for it (opening the sources again is quick)
     if (job.any) {
@@ -152,7 +189,7 @@ export class EnginePool {
   }
 
   private pump(w: number) {
-    if (this.busy[w] || !this.queues[w].length) return;
+    if (this.busy[w] || !this.queues[w]?.length) return;
     const q = this.queues[w];
     q.sort((a, b) => a.priority - b.priority); // lower number first (visible pages)
     const job = q.shift()!, id = this.nextId++;
@@ -162,6 +199,7 @@ export class EnginePool {
 
   private direct(w: number, op: string, args: Record<string, any>) {
     return new Promise<any>((resolve, reject) => {
+      if (this.stopped) return reject(new Error('ENGINE_STOPPED'));
       const id = this.nextId++;
       this.replies.set(id, { op, priority: -1, args, resolve, reject, w });
       this.workers[w].postMessage({ id, op, ...args }, args.bytes ? [args.bytes.buffer] : []);
@@ -172,7 +210,10 @@ export class EnginePool {
     const job = this.replies.get(data.id); this.replies.delete(data.id);
     if (job && job.priority !== -1) this.busy[w] = false;
     if (timing && job?.started) engineTimes.push({ op: job.op, page: job.page, key: job.key, waitMs: Math.round(job.started - job.queued!), workMs: Math.round(performance.now() - job.started), at: Math.round(performance.now()) });
-    if (data.error && DEAD.test(data.error) && job && job.priority !== -1) { this.replies.set(data.id, job); this.recover(w, data.error); return; } // the engine says it aborted
+    if (data.error && DEAD.test(data.error) && job) { // the engine says it aborted: a fresh one takes its place (an open or reset is not repeated)
+      if (job.priority === -1) job.reject(new Error(data.error)); else this.replies.set(data.id, job);
+      this.recover(w, data.error); return;
+    }
     if (job) data.error ? job.reject(new Error(data.error)) : job.resolve(data.result);
     this.pump(w);
   }

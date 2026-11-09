@@ -77,7 +77,7 @@ export function install() {
   addEventListener('error', (e) => { if (!/ResizeObserver/.test(e.message)) record('error', e.error ?? e.message); });
   addEventListener('unhandledrejection', (e) => {
     const r = e.reason, text = String(r?.message ?? r);
-    if (r?.name === 'AbortError' || /^(cancelled|CRASHED)$/.test(text)) return; // a closed picker, a job the app dropped itself
+    if (r?.name === 'AbortError' || /^(cancelled|CRASHED|ENGINE_STOPPED)$/.test(text)) return; // a closed picker, a job the app dropped itself
     record('rejection', r instanceof Error ? r : text);
   });
   setInterval(() => { if (dirty) { dirty = false; save(LAST + '-log', log); } }, 2000);
