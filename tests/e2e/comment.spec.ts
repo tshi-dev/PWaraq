@@ -74,7 +74,7 @@ test('comment: shapes, arrow and text box; move and recolour a shape; Arabic scr
   await drag('Ellipse', [250, 300], [400, 380]);
   await drag('Line', [60, 450], [200, 500]);
   await drag('Arrow', [250, 450], [400, 500]);
-  await drag('Text box', [60, 560], [300, 620]);
+  await drag('Text box', [420, 300], [560, 340]); // high up: the tool strip leaves less of the page in view
   await expect(page.locator('.state')).toHaveText('5 comments');
 
   // select the rectangle, make it blue and move it

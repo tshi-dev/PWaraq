@@ -15,6 +15,7 @@
   import Forms from './Forms.svelte';
   import Ocr from './Ocr.svelte';
   import Comment from './Comment.svelte';
+  import ScopeTabs from './ScopeTabs.svelte';
   import { setTask } from '../lib/crashlog';
   import FileName from './FileName.svelte';
   import SaveMenu from './SaveMenu.svelte';
@@ -157,18 +158,15 @@
     {/if}
   </header>
   {#if mode === 'edit' || mode === 'convert' || mode === 'protect'}
-  <div class="orgwrap" class:scoped={mode === 'edit'}>
+  <div class="orgwrap" class:scoped={mode === 'edit' && editScope === 'document'}>
     {#if applying}<p class="applying" role="status">{t('applying')}</p>{/if}
-    {#if mode === 'edit'}
-      <div class="scope" role="tablist" aria-label={t('edit')}>
-        <button role="tab" aria-selected={editScope === 'page'} class:on={editScope === 'page'} onclick={() => (editScope = 'page')}>{t('thisPage')}</button>
-        <button role="tab" aria-selected={editScope === 'document'} class:on={editScope === 'document'} onclick={() => (editScope = 'document')}>{t('wholeDocument')}</button>
-      </div>
+    {#if mode === 'edit' && editScope === 'document'}
+      <div class="scopeband"><ScopeTabs bind:scope={editScope} /></div>
     {/if}
     {#if mode !== 'edit' || editScope === 'document'}
     <DocTools {pool} kind={mode === 'edit' ? 'stamp' : mode} {sizes} {name} {bytes} {password} {onReplace} onGoto={showPage} />
     {:else}
-    <PageEditor {pool} base={{ doc: 0, page: editPage - 1 }} label="{t('page')} {editPage} {t('of')} {sizes.length}" onSave={edited} onCancel={() => (mode = 'view')} />
+    <PageEditor {pool} bind:scope={editScope} base={{ doc: 0, page: editPage - 1 }} label="{t('page')} {editPage} {t('of')} {sizes.length}" onSave={edited} onCancel={() => (mode = 'view')} />
     {/if}
   </div>
   {:else if mode === 'redact'}
@@ -249,9 +247,7 @@
   .ws { height: 100%; display: grid; grid-template-rows: auto auto 1fr; }
   .orgwrap { grid-row: 2 / 4; min-height: 0; position: relative; }
   .orgwrap.scoped { display: grid; grid-template-rows: auto 1fr; }
-  .scope { display: flex; gap: var(--s-8); padding: var(--s-8) var(--s-16); background: var(--surface); border-bottom: 1px solid var(--line); }
-  .scope button { min-height: var(--control); padding: 0 var(--s-16); border: 1px solid var(--line); border-radius: var(--r-8); background: var(--surface); font-weight: 600; color: var(--muted); }
-  .scope button.on { background: var(--green-soft); border-color: var(--green); color: var(--ink); }
+  .scopeband { display: flex; padding: var(--s-8) var(--s-16); background: var(--surface); border-bottom: 1px solid var(--line); }
   .applying { position: absolute; inset: 0; z-index: 2; margin: 0; display: grid; place-items: center; background: var(--veil); font-size: var(--fs-16); font-weight: 600; }
   .bar { display: flex; align-items: center; gap: var(--s-8); padding: var(--s-8) var(--s-16); background: var(--surface); border-bottom: 1px solid var(--line); min-width: 0; }
   :global(html[data-desktop]) .bar { padding-right: 156px; } /* room for the window buttons in the corner */

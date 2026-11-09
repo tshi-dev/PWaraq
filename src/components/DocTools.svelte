@@ -250,7 +250,8 @@
   .clean { color: var(--green); } .clean b { font-size: var(--fs-16); } .clean span { font-weight: 400; color: var(--muted); } .clean b { color: var(--green); }
   .finds, .items { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--s-8); }
   .finds > li { display: flex; gap: var(--s-12); align-items: flex-start; padding: var(--s-12); border: 1px solid var(--line); border-radius: var(--r-8); background: var(--paper); }
-  .finds .body { display: grid; gap: var(--s-8); justify-items: start; min-width: 0; }
+  .finds .body { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-8); min-width: 0; } /* the page links and the fix button share a line when they fit */
+  .finds .body > h3, .finds .body > p, .finds .body > .items { flex: 1 0 100%; }
   .finds h3 { margin: 0; font-size: var(--fs-14); font-weight: 600; }
   .finds p { margin: 0; color: var(--muted); }
   .finds .ic { flex: none; display: grid; place-items: center; color: var(--green); }

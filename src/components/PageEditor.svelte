@@ -17,14 +17,17 @@
   import { WINDOWS_FONTS } from '../lib/engine/fontstore';
   import { uid } from '../lib/pages';
   import { ctrlWheel, autoScroll } from '../lib/touch';
+  import Sheet from './Sheet.svelte';
+  import ScopeTabs from './ScopeTabs.svelte';
+  import { view } from '../lib/device.svelte';
 
-  let { pool, base, label, onSave, onCancel }: { pool: EnginePool; base: Item; label: string; onSave: (r: Saved) => void | Promise<void>; onCancel: () => void } = $props();
+  let { pool, base, label, onSave, onCancel, scope = $bindable() }: { pool: EnginePool; base: Item; label: string; onSave: (r: Saved) => void | Promise<void>; onCancel: () => void; scope?: 'page' | 'document' } = $props();
 
   // what the editor holds: the engine's edits plus an id; `orig` = the state it was lifted with (unchanged ones are dropped)
   // `no`: the number in the layer's name (Moved area 2); `hidden` (below) is view only and not part of the edits
   type Obj = Edit & { id: string; orig?: string; line?: number; removed?: boolean; aligned?: boolean; no?: number };
   const made = { move: 0, redact: 0, photo: 0 };
-  let hidden = $state<Record<string, boolean>>({}), layersOpen = $state(false);
+  let hidden = $state<Record<string, boolean>>({}), sheetOpen = $state(false);
   let doc = $state(-1), size = $state({ w: 595, h: 842 }), found = $state<{ lines: PageLine[]; images: Box[] }>({ lines: [], images: [] });
   let objs = $state<Obj[]>([]), selected = $state<string | null>(null), tool = $state<'select' | 'text' | 'redact' | 'move'>('select'), busy = $state(t('openingPage'));
   const sel = $derived(objs.find((o) => o.id === selected));
@@ -346,6 +349,7 @@
   onchange={(e) => { const f = e.currentTarget.files?.[0]; e.currentTarget.value = ''; if (f) usePhoto(f); }} />
 <div class="editor">
   <div class="tools" role="toolbar" aria-label={t('editPage')}>
+    {#if scope !== undefined}<ScopeTabs bind:scope /><span class="sep"></span>{/if}
     <button class="btn" class:on={tool === 'select'} aria-pressed={tool === 'select'} onclick={() => (tool = 'select')}>{@html icon('move')}{t('selectTool')}</button>
     <button class="btn" class:on={tool === 'text'} aria-pressed={tool === 'text'} onclick={() => { tool = 'text'; select(null); }} disabled={doc < 0}>{@html icon('text')}{t('addText')}</button>
     <button class="btn" onclick={() => choosePhoto(false)} disabled={doc < 0}>{@html icon('images')}{t('addPhoto')}</button>
@@ -355,13 +359,14 @@
     <button class="btn icon" onclick={undo} disabled={!canUndo} title={t('undo')} aria-label={t('undo')}>{@html icon('undo')}</button>
     <button class="btn icon" onclick={redo} disabled={!canRedo} title={t('redo')} aria-label={t('redo')}><span class="flip">{@html icon('undo')}</span></button>
     <button class="btn icon" onclick={remove} disabled={!sel} title={t('delete')} aria-label={t('delete')}>{@html icon('delete')}</button>
+    {#if !view.narrow}
     <label class="zoomer"><span class="sr">{t('zoom')}</span><select bind:value={zoom} aria-label={t('zoom')}>
       <option value={0}>{t('zoomFit')}</option>{#each ZOOMS as z}<option value={z}>{Math.round(z * 100)}%</option>{/each}
     </select></label>
     <span class="where num">{label}</span>
     <button class="btn" onclick={onCancel} disabled={!!busy && doc >= 0}>{@html icon('close')}{t('cancel')}</button>
     <button class="btn primary" onclick={save} disabled={!!busy}>{@html icon('check')}{t('savePage')}</button>
-    <button class="btn layers-btn" aria-expanded={layersOpen} aria-controls="layers" onclick={() => (layersOpen = !layersOpen)}>{@html icon('layers')}{t('layers')}</button>
+    {/if}
   </div>
 
   <div class="body">
@@ -403,7 +408,21 @@
       {/if}
     </div>
 
-    <aside class="side" aria-label={t('options')}>
+    {#if view.narrow}
+      <Sheet label={t('options')} bind:open={sheetOpen}>
+        {#snippet bar()}
+          <button class="btn icon" onclick={onCancel} disabled={!!busy && doc >= 0} >{t('cancel')}</button>
+          <button class="btn primary" onclick={save} disabled={!!busy}>{@html icon('check')}{t('savePage')}</button>
+        {/snippet}
+        {@render panel()}
+      </Sheet>
+    {:else}
+      <aside class="side" aria-label={t('options')}>{@render panel()}</aside>
+    {/if}
+  </div>
+</div>
+
+{#snippet panel()}
       <div class="opts">
       {#if sel?.kind === 'text'}
         {@const o = sel}
@@ -466,10 +485,9 @@
       {/if}
       </div>
 
-      <section class="layers" id="layers" class:open={layersOpen} aria-label={t('layers')}>
+      <section class="layers" id="layers" aria-label={t('layers')}>
         <div class="lhead">
           <h2>{t('layers')}</h2>
-          <button class="btn icon close" onclick={() => (layersOpen = false)} title={t('close')} aria-label={t('close')}>{@html icon('close')}</button>
         </div>
         <div class="order" role="group" aria-label={t('layerOrder')}>
           {#each ORDER as [to, ic, label]}
@@ -496,9 +514,7 @@
           <p class="help">{t('layersEmpty')}</p>
         {/if}
       </section>
-    </aside>
-  </div>
-</div>
+{/snippet}
 
 <style>
   .editor { height: 100%; display: grid; grid-template-rows: auto 1fr; min-height: 0; }
@@ -528,14 +544,13 @@
   .pic img { width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; }
   .corner { position: absolute; right: -8px; bottom: -8px; width: 14px; height: 14px; border: 2px solid var(--surface); border-radius: 50%; background: var(--green); cursor: nwse-resize; }
   .side { display: flex; flex-direction: column; gap: var(--s-16); padding: var(--s-16); background: var(--surface); border-inline-start: 1px solid var(--line); overflow-y: auto; }
-  .side h2 { margin: 0; font-size: var(--fs-18); }
+  .opts h2, .lhead h2 { margin: 0; font-size: var(--fs-18); }
   .opts { display: flex; flex-direction: column; gap: var(--s-16); flex: none; }
   .obj.hid { display: none; }
   .obj.white { background: var(--page); }
-  /* layers: a list under the options; on a narrow screen a sheet over the page, opened by the toolbar's Layers button */
+  /* layers: a list under the options (in the bottom sheet on a narrow screen) */
   .layers { display: flex; flex-direction: column; gap: var(--s-8); padding-top: var(--s-16); border-top: 1px solid var(--line); }
   .lhead { display: flex; align-items: center; justify-content: space-between; }
-  .close, .layers-btn { display: none; }
   .order { display: flex; gap: var(--s-8); }
   .list { display: flex; flex-direction: column; gap: var(--s-8); margin: 0; padding: 0; list-style: none; }
   .list li { display: flex; align-items: center; gap: var(--s-8); }
@@ -558,10 +573,10 @@
   .note { display: flex; gap: var(--s-8); margin: 0; padding: var(--s-12); border-radius: var(--r-8); background: var(--green-soft); color: var(--ink); }
   .note :global(svg) { flex: none; color: var(--green); }
   .note.warn { background: var(--paper); border: 1px solid var(--green); }
-  @media (max-width: 900px) {
-    .body { grid-template-columns: 1fr; grid-template-rows: 1fr auto; } .side { max-height: 40vh; border-inline-start: 0; border-top: 1px solid var(--line); }
-    .layers-btn, .close { display: inline-flex; }
-    .layers { display: none; position: fixed; z-index: 30; inset-inline: 0; bottom: 0; max-height: 60dvh; overflow-y: auto; padding: var(--s-16) var(--s-16) calc(var(--s-16) + env(safe-area-inset-bottom, 0px)); background: var(--surface); border-top: 1px solid var(--line); border-radius: var(--r-12) var(--r-12) 0 0; box-shadow: var(--shadow); }
-    .layers.open { display: flex; }
+  @media (max-width: 820px) {
+    .body { grid-template-columns: 1fr; padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px)); } /* the dock of the bottom sheet */
+    .tools { flex-wrap: nowrap; overflow-x: auto; padding-inline: var(--s-12); } /* one row that scrolls sideways */
+    .tools > :global(*) { flex: none; }
+    .stage { padding: var(--s-12); }
   }
 </style>

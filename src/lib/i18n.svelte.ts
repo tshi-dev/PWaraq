@@ -363,6 +363,7 @@ const strings = {
   cSelect: ['Select', 'تحديد'], cHighlight: ['Highlight', 'تمييز'], cUnderline: ['Underline', 'تسطير'], cStrike: ['Strike-through', 'شطب'],
   cPen: ['Pen', 'قلم'], cRect: ['Rectangle', 'مستطيل'], cEllipse: ['Ellipse', 'شكل بيضاوي'], cLine: ['Line', 'خط'], cArrow: ['Arrow', 'سهم'],
   cText: ['Text box', 'مربع نص'], cNote: ['Sticky note', 'ملاحظة لاصقة'],
+  cGroupMark: ['Mark text', 'تعليم النص'], cGroupDraw: ['Draw', 'رسم'], cGroupNotes: ['Notes', 'ملاحظات'],
   cColour: ['Colour', 'اللون'], cYellow: ['Yellow', 'أصفر'], cRed: ['Red', 'أحمر'], cGreen: ['Green', 'أخضر'], cBlue: ['Blue', 'أزرق'], cOrange: ['Orange', 'برتقالي'], cDark: ['Dark', 'داكن'],
   cContents: ['Text of the comment', 'نص التعليق'],
   cDelete: ['Delete comment', 'احذف التعليق'],

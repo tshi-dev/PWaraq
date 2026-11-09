@@ -9,17 +9,25 @@
   import { icon } from '../lib/icons.js';
   import { lazyPage } from '../lib/lazy';
   import { pageZoom, autoScroll } from '../lib/touch';
+  import Sheet from './Sheet.svelte';
+  import { view } from '../lib/device.svelte';
 
   let { pool, sizes, bytes, password, changed = $bindable(false) }: { pool: EnginePool; sizes: { w: number; h: number }[]; bytes: Uint8Array; password?: string; changed?: boolean } = $props();
-  const W0 = 720; let W = $state(W0); const widest = $derived(Math.max(...sizes.map((s) => s.w))), k = (_: number) => W / widest /* one scale for every page: W is the widest page's width */;
+  const W0 = 720; let W = $state(Math.min(W0, innerWidth - 24)); /* a phone starts with the page as wide as the screen */ const widest = $derived(Math.max(...sizes.map((s) => s.w))), k = (_: number) => W / widest /* one scale for every page: W is the widest page's width */;
   type Tool = 'select' | Kind;
-  const TOOLS: [Tool, Key][] = [['select', 'cSelect'], ['highlight', 'cHighlight'], ['underline', 'cUnderline'], ['strike', 'cStrike'], ['ink', 'cPen'], ['square', 'cRect'], ['circle', 'cEllipse'], ['line', 'cLine'], ['arrow', 'cArrow'], ['text', 'cText'], ['note', 'cNote']];
+  // the tool strip: Select, then Mark text / Draw / Notes (tool, label, icon)
+  const GROUPS: [Key | null, [Tool, Key, string][]][] = [
+    [null, [['select', 'cSelect', 'pointer']]],
+    ['cGroupMark', [['highlight', 'cHighlight', 'highlight'], ['underline', 'cUnderline', 'underline'], ['strike', 'cStrike', 'strike']]],
+    ['cGroupDraw', [['ink', 'cPen', 'pen'], ['square', 'cRect', 'square'], ['circle', 'cEllipse', 'circle'], ['line', 'cLine', 'line'], ['arrow', 'cArrow', 'arrow']]],
+    ['cGroupNotes', [['text', 'cText', 'textbox'], ['note', 'cNote', 'note']]],
+  ];
   const COLORS: [string, Key][] = [['#f5c518', 'cYellow'], ['#d93a3a', 'cRed'], ['#15775d', 'cGreen'], ['#2f6fd6', 'cBlue'], ['#ee8a1c', 'cOrange'], ['#233c36', 'cDark']];
   const STICKY: Tool[] = ['highlight', 'underline', 'strike', 'ink']; // these stay active after a comment; the others go back to Select
   const FIRST: Partial<Record<Tool, string>> = { highlight: '#f5c518', note: '#f5c518', text: '#233c36' };
 
   let items = $state<Annot[]>([]), doc = $state(-1), error = $state(''), tool = $state<Tool>('select'), color = $state('#f5c518'), selected = $state('');
-  let past = $state<Annot[][]>([]), future = $state<Annot[][]>([]), draft = $state<Annot | null>(null);
+  let sheetOpen = $state(false), past = $state<Annot[][]>([]), future = $state<Annot[][]>([]), draft = $state<Annot | null>(null);
   let orig: Annot[] = [], seq = 0, picked = false, noteBox = $state<HTMLTextAreaElement>(), before: Annot[] | null = null, fresh = '';
   const sel = $derived(items.find((a) => a.id === selected));
   const src = (a: Annot) => ({ page: a.page, src: Number(a.id.split(':')[1]) });
@@ -136,7 +144,7 @@
     edit(() => { items.push(item); });
     selected = item.id; fresh = item.id;
     if (!STICKY.includes(tool)) tool = 'select';
-    if (a.kind === 'text' || a.kind === 'note') { await tick(); noteBox?.focus(); noteBox?.select(); }
+    if (a.kind === 'text' || a.kind === 'note') { if (view.narrow) sheetOpen = true; await tick(); noteBox?.focus(); noteBox?.select(); }
   }
 
   function keys(e: KeyboardEvent) {
@@ -158,7 +166,21 @@
 
 <svelte:window onkeydown={keys} />
 <div class="comment">
-  <section class="pages" aria-label={t('pages')} use:autoScroll use:pageZoom={{ get: () => W, set: (v) => (W = v), min: W0 / 2, max: W0 * 3 }}>
+  <div class="strip" role="toolbar" aria-label={t('comment')}>
+    {#each GROUPS as [label, tools]}
+      <div class="grp" role="group" aria-label={t(label ?? 'cSelect')}>
+        {#if label}<span class="cap">{t(label)}</span>{/if}
+        <div class="btns">
+          {#each tools as [id, name, ic]}
+            <button class="btn tool" class:on={tool === id} aria-pressed={tool === id} onclick={() => choose(id)} disabled={doc < 0}>{@html icon(ic)}{t(name)}</button>
+          {/each}
+        </div>
+      </div>
+    {/each}
+  </div>
+  {#if error}<p class="error" role="alert">{error}</p>{/if}
+  <div class="cbody">
+  <section class="pages" aria-label={t('pages')} use:autoScroll use:pageZoom={{ get: () => W, set: (v) => (W = v), min: Math.min(W0, W) / 2, max: W0 * 3 }}>
     {#if doc >= 0}
       {#each sizes as s, i}
         <div class="sheet" style="width:{s.w * k(i)}px;height:{s.h * k(i)}px">
@@ -185,38 +207,49 @@
     {/if}
   </section>
 
-  <aside class="side">
-    <div class="ph"><h2>{t('comment')}</h2><p>{t('commentHelp')}</p></div>
-    <div class="tools" role="toolbar" aria-label={t('comment')}>
-      {#each TOOLS as [id, label]}
-        <button class="tool" class:on={tool === id} aria-pressed={tool === id} onclick={() => choose(id)} disabled={doc < 0}>{t(label)}</button>
-      {/each}
-    </div>
+  {#if view.narrow}
+    <Sheet label={t('comment')} bind:open={sheetOpen}>
+      {#snippet bar()}
+        {@render history()}
+        {#if sel}<button class="btn icon" onclick={remove} title={t('cDelete')} aria-label={t('cDelete')}>{@html icon('clear')}</button>{/if}
+      {/snippet}
+      <div class="opts">{@render options()}</div>
+    </Sheet>
+  {:else}
+    <aside class="side">
+      <div class="ph"><h2>{t('comment')}</h2><p>{t('commentHelp')}</p></div>
+      {@render options()}
+      <div class="pf"><div class="row">{@render history()}</div></div>
+    </aside>
+  {/if}
+  </div>
+</div>
+
+{#snippet history()}
+  <button class="btn icon" onclick={undo} disabled={!past.length} title={t('undo')} aria-label={t('undo')}>{@html icon('undo')}</button>
+  <button class="btn icon" onclick={redo} disabled={!future.length} title={t('redo')} aria-label={t('redo')}><span class="flip">{@html icon('undo')}</span></button>
+  <span class="state">{count} {t('cCount')}</span>
+{/snippet}
+
+{#snippet options()}
+  {#if tool !== 'select' || sel}
     <div class="row" role="group" aria-label={t('cColour')}>
       {#each COLORS as [c, label]}
         <button class="swatch" class:on={(sel?.color ?? color) === c} style="background:{c}" aria-label={t(label)} aria-pressed={(sel?.color ?? color) === c} onclick={() => pick(c)}></button>
       {/each}
     </div>
-    {#if sel}
-      <label class="field"><span>{t('cContents')}</span>
-        <textarea bind:this={noteBox} rows="4" dir="auto" value={sel.note}
-          onfocus={() => (before = fresh === sel.id ? null : snap())}
-          oninput={(e) => { sel.note = e.currentTarget.value; }}
-          onchange={() => { fresh = ''; if (before && JSON.stringify(before) !== JSON.stringify(snap())) record(before); before = null; }}></textarea></label>
-      <button class="btn" onclick={remove}>{@html icon('clear')}{t('cDelete')}</button>
-    {:else}
-      <p class="help">{t('cNone')}</p>
-    {/if}
-    <div class="pf">
-    <div class="row">
-      <button class="btn icon" onclick={undo} disabled={!past.length} title={t('undo')} aria-label={t('undo')}>{@html icon('undo')}</button>
-      <button class="btn icon" onclick={redo} disabled={!future.length} title={t('redo')} aria-label={t('redo')}><span class="flip">{@html icon('undo')}</span></button>
-      <span class="state">{count} {t('cCount')}</span>
-    </div>
-    {#if error}<p class="error" role="alert">{error}</p>{/if}
-    </div>
-  </aside>
-</div>
+  {/if}
+  {#if sel}
+    <label class="field"><span>{t('cContents')}</span>
+      <textarea bind:this={noteBox} rows="4" dir="auto" value={sel.note}
+        onfocus={() => (before = fresh === sel.id ? null : snap())}
+        oninput={(e) => { sel.note = e.currentTarget.value; }}
+        onchange={() => { fresh = ''; if (before && JSON.stringify(before) !== JSON.stringify(snap())) record(before); before = null; }}></textarea></label>
+    <button class="btn" onclick={remove}>{@html icon('clear')}{t('cDelete')}</button>
+  {:else if tool === 'select'}
+    <p class="help">{t('cNone')}</p>
+  {/if}
+{/snippet}
 
 {#snippet shape(a: Annot)}
   <g data-id={a.id}>
@@ -255,7 +288,12 @@
 {/snippet}
 
 <style>
-  .comment { height: 100%; display: grid; grid-template-columns: 1fr var(--panel); min-height: 0; }
+  .comment { height: 100%; display: grid; grid-template-rows: auto auto 1fr; min-height: 0; }
+  .cbody { display: grid; grid-template-columns: 1fr var(--panel); min-height: 0; }
+  .strip { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s-8) var(--s-24); padding: var(--s-8) var(--s-16); background: var(--surface); border-bottom: 1px solid var(--line); }
+  .grp { display: grid; gap: var(--s-4); }
+  .cap { color: var(--muted); font-size: var(--fs-12); }
+  .btns { display: flex; gap: var(--s-8); }
   .pages { display: flex; flex-direction: column; align-items: safe center; gap: var(--s-16); background: var(--canvas); padding: var(--s-24); overflow: auto; }
   .sheet { position: relative; flex: none; background: #fff; box-shadow: var(--shadow); }
   .sheet canvas { width: 100%; height: 100%; display: block; }
@@ -270,16 +308,20 @@
   .handle { fill: #fff; stroke: var(--green); stroke-width: 1.5; cursor: nwse-resize; }
   .help, .state { margin: 0; color: var(--muted); }
   .state { font-size: var(--fs-12); margin-inline-start: auto; }
-  .tools { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-8); }
-  .tool { min-height: var(--control); padding: 0 var(--s-12); border: 1px solid var(--line); border-radius: var(--r-8); background: var(--surface); color: var(--ink); font-weight: 600; }
-  .tool.on { background: var(--green-soft); border-color: var(--green); }
-  .tool:disabled { opacity: .55; }
+  .btn.on { background: var(--green-soft); border-color: var(--green); color: var(--green-deep); }
   .row { display: flex; align-items: center; gap: var(--s-8); }
   .swatch { width: var(--control); height: var(--control); border: 1px solid var(--muted); border-radius: 50%; padding: 0; cursor: pointer; } /* a ring that shows on every panel, also round the dark ink */
   .swatch.on { border-color: var(--ink); box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); }
   .field { display: grid; gap: var(--s-8); font-weight: 600; }
   .field textarea { padding: var(--s-8) var(--s-12); border: 1px solid var(--line); border-radius: var(--r-8); background: var(--paper); font: inherit; font-weight: 400; resize: vertical; }
   .flip { display: inline-flex; transform: scaleX(-1); }
-  .error { margin: 0; color: var(--danger); }
-  @media (max-width: 900px) { .comment { grid-template-columns: 1fr; grid-template-rows: 1fr auto; } .side { border-inline-start: 0; border-top: 1px solid var(--line); } }
+  .error { margin: 0; padding: var(--s-8) var(--s-16); color: var(--danger); }
+  .opts { display: flex; flex-direction: column; gap: var(--s-12); }
+  @media (max-width: 820px) {
+    .cbody { grid-template-columns: 1fr; padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px)); } /* the dock of the bottom sheet */
+    .strip { flex-wrap: nowrap; overflow-x: auto; padding-inline: var(--s-12); }
+    .grp, .btns .btn { flex: none; }
+    .state { margin-inline-start: 0; }
+    .pages { padding: var(--s-12); }
+  }
 </style>
