@@ -26,17 +26,28 @@
   import { update, version, started, check as checkUpdate, restart } from './lib/update.svelte';
   import Workspace from './components/Workspace.svelte';
   import Portfolio from './components/Portfolio.svelte';
+  import { TOOLS, toolFromHash, type ToolId } from './lib/quicktools';
 
   const previous = crash.previousRun(); // what the run before this one was doing, read before this run starts overwriting it
   crash.install();
   const pool = new EnginePool();
-  let doc = $state<{ name: string; sizes: { w: number; h: number }[]; bytes: Uint8Array; modified: boolean; password?: string; open?: string; path?: string; task?: Key; extra?: File[] } | null>(null);
+  let doc = $state<{ name: string; sizes: { w: number; h: number }[]; bytes: Uint8Array; modified: boolean; password?: string; open?: string; path?: string; task?: Key; at?: ToolId; extra?: File[] } | null>(null);
   let openedPath: string | undefined; // desktop: the file on disk behind `doc`, so Save writes straight back
   let portfolio = $state<PortfolioData | null>(null);
   let busy = $state(false), error = $state(''), over = $state(false), recent = $state<Recent[]>([]), again = $state(false);
   let picker: HTMLInputElement;
   // a mode tile: the task the next opened file lands in, and (Combine) the other files chosen with it
   let want: Key | undefined, extra: File[] = [];
+  // a quick tool (a tile or the link /app/#tool=<id>): the start screen asks for its file(s), the workspace opens at it
+  let armed = $state<ToolId | null>(null);
+  function readLink() { // on load, and when a link changes only the hash of the open app
+    if (!/tool=/.test(location.hash)) return;
+    const id = toolFromHash(location.hash);
+    history.replaceState(null, '', location.pathname + location.search);
+    if (!doc && !portfolio) { armed = id; want = undefined; }
+  }
+  const quickIds = Object.keys(TOOLS) as ToolId[];
+  const disarm = () => { armed = null; want = undefined; };
   const modes: { task: Key | 'portfolio'; name: Key; line: Key; icon: string }[] = [
     { task: 'sign', name: 'sign', line: 'modeSignLine', icon: 'signature' },
     { task: 'portfolio', name: 'portfolio', line: 'portfolioTile', icon: 'library' },
@@ -79,6 +90,8 @@
   }
   onMount(() => {
     refresh();
+    readLink();
+    addEventListener('hashchange', readLink);
     startSession().then(async (unclean) => {
       if (unclean) { drafts = (await listDrafts()).slice(0, 1); await crash.record('unclean', 'The previous run ended without a clean exit', undefined, previous); }
       // an unclean exit alone (a closed browser, a discarded tab, a power cut) is only noted on the start screen; with an
@@ -97,7 +110,7 @@
       if (isDesktop) appWindow().onCloseRequested(() => endSession()); // ✕, Alt+F4 or the task bar: a clean exit is written before the window goes
     } catch { /* the app still works without them */ }
     started();
-    return () => clearInterval(every);
+    return () => { clearInterval(every); removeEventListener('hashchange', readLink); };
   });
 
   class Damaged { pages: number; constructor(pages: number) { this.pages = pages; } }
@@ -109,7 +122,7 @@
     if (pool.repaired && !repairedOk) throw new Damaged(sizes.length); // asked first: "Open what could be read"
     if (!(doc?.name === name && modified)) { draftId = uid(); kept = null; } // a change to the open document keeps its draft; anything else starts a new one
     doc = null; portfolio = null; await tick(); // a new document gets a fresh workspace
-    doc = { name, sizes, bytes, modified, password, open, path: openedPath, task: want, extra }; want = undefined; extra = [];
+    doc = { name, sizes, bytes, modified, password, open, path: openedPath, task: want, at: armed ? TOOLS[armed].at : undefined, extra }; want = undefined; extra = []; armed = null;
     keepDraft();
   }
   // a damaged PDF MuPDF could still read: shown on the start screen until the person chooses
@@ -199,14 +212,14 @@
     for (const [name, data] of Object.entries(entries)) await writePortfolio(m.id, name, data); // kept on this device from now on
     await showPortfolio(await load(pool, entries));
   }
-  async function showPortfolio(p: PortfolioData) { want = undefined; extra = []; doc = null; portfolio = null; await tick(); portfolio = p; }
+  async function showPortfolio(p: PortfolioData) { disarm(); extra = []; doc = null; portfolio = null; await tick(); portfolio = p; }
   async function startPortfolio() {
     await pool.reset();
     showPortfolio(newPortfolio(`${t('untitled')} ${new Date().toLocaleDateString(i18n.lang === 'ar' ? 'ar' : 'en-GB')}`));
   }
 
   async function openRecent(r: Recent) {
-    want = undefined; extra = [];
+    disarm(); extra = [];
     busy = true; error = ''; again = false;
     try {
       if (r.kind === 'portfolio') {
@@ -224,7 +237,10 @@
 
   async function pick(multiple = false) {
     picker.multiple = multiple;
-    const picked = await pickFiles({ multiple, accept: { 'application/pdf': ['.pdf'], 'image/*': ['.png', '.jpg', '.jpeg'], 'application/zip': ['.waraq'], 'application/octet-stream': CONVERTIBLE_ACCEPT.split(',') }, fallback: () => picker.click() });
+    let fell = false; // the plain file input answers through its change and cancel events
+    const images = armed && TOOLS[armed].accepts === 'images';
+    const picked = await pickFiles({ multiple, accept: images ? { 'image/*': ['.png', '.jpg', '.jpeg'] } : { 'application/pdf': ['.pdf'], 'image/*': ['.png', '.jpg', '.jpeg'], 'application/zip': ['.waraq'], 'application/octet-stream': CONVERTIBLE_ACCEPT.split(',') }, fallback: () => { fell = true; picker.click(); } });
+    if (!picked.length && !fell && armed) disarm(); // cancelled
     openMany(picked);
   }
   // Several files (or photos) chosen together are combined in Organize; photos first become one new, unsaved PDF.
@@ -249,10 +265,11 @@
     }
     busy = false;
   }
-  const plain = () => { want = undefined; return pick(true); };
-  const tile = (task: Key | 'portfolio') => { if (task === 'portfolio') return startPortfolio(); want = task; return pick(task === 'organize'); };
+  const plain = () => { disarm(); return pick(true); };
+  const tile = (task: Key | 'portfolio') => { armed = null; if (task === 'portfolio') return startPortfolio(); want = task; return pick(task === 'organize'); };
+  const quick = (id: ToolId) => { armed = id; want = TOOLS[id].task; return pick(TOOLS[id].multiple); };
   async function drop(e: DragEvent) {
-    e.preventDefault(); over = false; want = undefined; extra = [];
+    e.preventDefault(); over = false; want = armed ? TOOLS[armed].task : undefined; extra = [];
     const files = [...(e.dataTransfer?.files ?? [])], item = e.dataTransfer?.items[0];
     const handle = await (item as any)?.getAsFileSystemHandle?.().catch(() => null);
     openMany(files.map((file, i) => ({ file, handle: i === 0 && handle?.kind === 'file' ? handle : undefined })));
@@ -308,10 +325,10 @@
 {/if}
 <Notice message={notice} slow={health?.kind === 'slow'} oncancel={() => pool.cancelAll()} />
 {#if isDesktop}<TitleBar flush={!!(doc || portfolio)} float={!!(doc || portfolio)} /><PackPrompt />{/if}
-<input bind:this={picker} type="file" accept="application/pdf,.pdf,.waraq,.png,.jpg,.jpeg,{CONVERTIBLE_ACCEPT}" hidden onchange={(e) => { openMany(Array.from(e.currentTarget.files ?? []).map((file) => ({ file }))); e.currentTarget.value = ''; }} />
+<input bind:this={picker} type="file" accept={armed && TOOLS[armed].accepts === 'images' ? '.png,.jpg,.jpeg' : `application/pdf,.pdf,.waraq,.png,.jpg,.jpeg,${CONVERTIBLE_ACCEPT}`} hidden oncancel={disarm} onchange={(e) => { openMany(Array.from(e.currentTarget.files ?? []).map((file) => ({ file }))); e.currentTarget.value = ''; }} />
 
 {#if doc}
-  <Workspace {pool} sizes={doc.sizes} name={doc.name} bytes={doc.bytes} modified={doc.modified} password={doc.password} task={doc.task} extra={doc.extra} onOpen={plain} onClose={close} onSave={() => save()} onSaveAs={() => save(true)}
+  <Workspace {pool} sizes={doc.sizes} name={doc.name} bytes={doc.bytes} modified={doc.modified} password={doc.password} task={doc.task} at={doc.at} extra={doc.extra} onOpen={plain} onClose={close} onSave={() => save()} onSaveAs={() => save(true)}
     onReplace={(bytes, pw, next) => { if (next) want = next; return show(bytes, doc!.name, true, pw, false, doc!.open); }} />
 {:else if portfolio}
   <Portfolio {pool} {portfolio} onClose={close} />
@@ -325,11 +342,21 @@
       <p class="tag">{t('tagline')}</p>
     </div>
     <section class="open" aria-labelledby="open-h">
-      <h2 id="open-h">{t('startOpenTitle')}</h2>
-      <p class="muted drop">{t('dropHere')}</p>
-      <div class="actions">
-        <button class="btn primary big" onclick={plain} disabled={busy}>{@html icon('upload')}{busy ? t('reading') : t('open')}</button>
-      </div>
+      {#if armed}
+        {@const q = TOOLS[armed]}
+        <h2 id="open-h" class="armed">{@html icon(q.icon)}{t(q.title)}</h2>
+        <p class="muted drop">{t(q.multiple ? 'qtDropMany' : 'qtDropOne')}</p>
+        <div class="actions">
+          <button class="btn primary big" onclick={() => quick(armed!)} disabled={busy}>{@html icon('upload')}{busy ? t('reading') : t(q.accepts === 'images' ? 'qtChooseImages' : q.multiple ? 'qtChoosePdfs' : 'qtChoosePdf')}</button>
+          <button class="btn big" onclick={disarm} disabled={busy}>{t('cancel')}</button>
+        </div>
+      {:else}
+        <h2 id="open-h">{t('startOpenTitle')}</h2>
+        <p class="muted drop">{t('dropHere')}</p>
+        <div class="actions">
+          <button class="btn primary big" onclick={plain} disabled={busy}>{@html icon('upload')}{busy ? t('reading') : t('open')}</button>
+        </div>
+      {/if}
       {#if locked}
         <form class="lock" onsubmit={unlockOpen}>
           <label for="pdfpw">{@html icon('protect')}{t('needsPassword')} <strong>{locked.name}</strong></label>
@@ -359,6 +386,14 @@
         <button class="btn" onclick={undoClose}>{@html icon('undo')}{t('undoClose').replace('{name}', closed.name)}</button>
       {/if}
       {#if error}<p class="error" role="alert">{error}</p>{#if again}<button class="btn" onclick={plain}>{t('chooseFile')}</button>{/if}{/if}
+    </section>
+    <section class="quick" aria-labelledby="quick-h">
+      <h2 id="quick-h">{t('quickTools')}</h2>
+      <ul>
+        {#each quickIds as id (id)}
+          <li><button class="qt" data-tool={id} aria-pressed={armed === id} onclick={() => quick(id)} disabled={busy}>{@html icon(TOOLS[id].icon)}<span>{t(TOOLS[id].name)}</span></button></li>
+        {/each}
+      </ul>
     </section>
     <section class="modes" aria-labelledby="modes-h">
       <h2 id="modes-h">{t('modesTitle')}</h2>
@@ -428,7 +463,13 @@
   .muted { margin: 0; color: var(--muted); }
   .small { font-size: var(--fs-12); }
   .error { color: var(--danger); margin: 0; }
-  .open, .modes, .recent { width: min(960px, 100%); }
+  .open, .quick, .modes, .recent { width: min(960px, 100%); }
+  .armed { display: inline-flex; align-items: center; gap: var(--s-8); }
+  .armed :global(svg) { width: 24px; height: 24px; color: var(--green); }
+  .quick ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s-12); } /* the columns of the mode tiles below */
+  .qt { width: 100%; height: 100%; min-height: var(--control); display: flex; align-items: center; gap: var(--s-8); padding: var(--s-8) var(--s-12); border: 1px solid var(--line); border-radius: var(--r-8); background: var(--surface); font-weight: 600; text-align: start; }
+  .qt:hover:not(:disabled), .qt[aria-pressed='true'] { border-color: var(--green); background: var(--green-soft); }
+  .qt :global(svg) { flex: none; width: 18px; height: 18px; color: var(--green); }
   .open { display: grid; justify-items: center; gap: var(--s-12); padding: var(--s-32) var(--s-24); border: 1px dashed var(--line); border-radius: var(--r-12); background: var(--surface); text-align: center; }
   .open h2 { margin: 0; font-size: var(--fs-24); }
   .modes ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s-12); }
@@ -437,8 +478,8 @@
   .mode :global(svg) { width: 24px; height: 24px; color: var(--green); margin-block-end: var(--s-8); }
   .mode strong { font-size: var(--fs-16); }
   .mode .muted { font-size: var(--fs-14); }
-  @media (max-width: 960px) { .modes ul { grid-template-columns: repeat(2, 1fr); } }
-  @media (max-width: 600px) { .modes ul { grid-template-columns: 1fr; } .open { padding: var(--s-24) var(--s-16); } }
+  @media (max-width: 960px) { .modes ul { grid-template-columns: repeat(2, 1fr); } .quick ul { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 600px) { .modes ul { grid-template-columns: 1fr; } .quick ul { grid-template-columns: 1fr 1fr; } .open { padding: var(--s-24) var(--s-16); } }
   h2 { margin: 0 0 var(--s-12); font-size: var(--fs-18); }
   .recent ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--s-12); }
   .recent li { position: relative; }

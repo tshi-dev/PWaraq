@@ -5,9 +5,10 @@
   import { mb } from '../lib/size';
   import { icon } from '../lib/icons.js';
   import { saveFile } from '../lib/store';
-  let { pool, bytes, name, password, compact = false, disabled, primary, saveOff, canShrink, onSave, onSaveAs }: { pool: EnginePool; compact?: boolean; bytes: Uint8Array; name: string; password?: string; disabled: boolean; primary: boolean; saveOff: boolean; canShrink: boolean;
+  let { pool, bytes, name, password, compact = false, disabled, primary, saveOff, canShrink, shrinkNow = false, onSave, onSaveAs }: { pool: EnginePool; compact?: boolean; shrinkNow?: boolean; bytes: Uint8Array; name: string; password?: string; disabled: boolean; primary: boolean; saveOff: boolean; canShrink: boolean;
     onSave: () => void; onSaveAs: () => void } = $props();
-  let open = $state(false), dialog = $state(false), level = $state<'recommended' | 'small'>('recommended'), busy = $state(false), note = $state('');
+  // svelte-ignore state_referenced_locally (the Compress quick tool opens the dialog once, with the new document)
+  let open = $state(false), dialog = $state(shrinkNow), level = $state<'recommended' | 'small'>('recommended'), busy = $state(false), note = $state('');
   async function shrink() {
     busy = true; note = '';
     try {

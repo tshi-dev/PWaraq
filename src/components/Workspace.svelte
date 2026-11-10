@@ -23,8 +23,9 @@
   import { isDesktop } from '../lib/desktop';
   import { view } from '../lib/device.svelte';
   import MoreMenu from './MoreMenu.svelte';
+  import type { ToolId } from '../lib/quicktools';
 
-  let { pool, sizes, name, bytes, modified, password, task, extra, onOpen, onClose, onSave, onSaveAs, onReplace }: { pool: EnginePool; sizes: { w: number; h: number }[]; name: string; bytes: Uint8Array; modified: boolean; password?: string; task?: Key; extra?: File[];
+  let { pool, sizes, name, bytes, modified, password, task, at, extra, onOpen, onClose, onSave, onSaveAs, onReplace }: { pool: EnginePool; sizes: { w: number; h: number }[]; name: string; bytes: Uint8Array; modified: boolean; password?: string; task?: Key; at?: ToolId; extra?: File[];
     onOpen: () => void; onClose: () => void; onSave: () => void; onSaveAs: () => void; onReplace: (bytes: Uint8Array, password?: string, task?: Key) => Promise<void> } = $props();
   // svelte-ignore state_referenced_locally (a start-screen tile picks the first task; a new document is a new workspace)
   let mode = $state<'view' | 'organize' | 'edit' | 'sign' | 'convert' | 'protect' | 'redact' | 'forms' | 'ocr' | 'comment'>((task as 'view' | undefined) ?? 'view'), editScope = $state<'page' | 'document'>('page'), organize = $state<Organize>(), organized = $state(false), comment = $state<Comment>(), commented = $state(false), applying = $state(false);
@@ -137,7 +138,7 @@
     <span class="grow" data-tauri-drag-region></span>
     {#if slim}
     <span class="end">
-      <SaveMenu {pool} {bytes} {name} {password} compact disabled={applying} primary={modified} saveOff={(mode === 'edit' && editScope === 'page') || mode === 'sign'} canShrink={!pending && mode !== 'sign' && !(mode === 'edit' && editScope === 'page')}
+      <SaveMenu {pool} {bytes} {name} {password} compact disabled={applying} primary={modified} saveOff={(mode === 'edit' && editScope === 'page') || mode === 'sign'} canShrink={!pending && mode !== 'sign' && !(mode === 'edit' && editScope === 'page')} shrinkNow={at === 'compress'}
         onSave={() => save()} onSaveAs={() => save(true)} />
       <MoreMenu>
         <button class="btn" onclick={onOpen}>{@html icon('upload')}{t('openShort')}</button>
@@ -148,7 +149,7 @@
     </span>
     {:else}
     <span class="end">
-      <SaveMenu {pool} {bytes} {name} {password} disabled={applying} primary={modified} saveOff={(mode === 'edit' && editScope === 'page') || mode === 'sign'} canShrink={!pending && mode !== 'sign' && !(mode === 'edit' && editScope === 'page')}
+      <SaveMenu {pool} {bytes} {name} {password} disabled={applying} primary={modified} saveOff={(mode === 'edit' && editScope === 'page') || mode === 'sign'} canShrink={!pending && mode !== 'sign' && !(mode === 'edit' && editScope === 'page')} shrinkNow={at === 'compress'}
         onSave={() => save()} onSaveAs={() => save(true)} />
       <button class="btn" onclick={onOpen} title={t('openShort')} aria-label={t('openShort')}>{@html icon('upload')}<span class="lbl">{t('openShort')}</span></button>
       <button class="btn" onclick={onClose} title={t('close')} aria-label={t('close')}>{@html icon('close')}<span class="lbl">{t('close')}</span></button>
@@ -165,7 +166,7 @@
       <div class="scopeband"><ScopeTabs bind:scope={editScope} /></div>
     {/if}
     {#if mode !== 'edit' || editScope === 'document'}
-    <DocTools {pool} kind={mode === 'edit' ? 'stamp' : mode} {sizes} {name} {bytes} {password} {onReplace} onGoto={showPage} />
+    <DocTools {pool} kind={mode === 'edit' ? 'stamp' : mode} {at} {sizes} {name} {bytes} {password} {onReplace} onGoto={showPage} />
     {:else}
     <PageEditor {pool} bind:scope={editScope} base={{ doc: 0, page: editPage - 1 }} label="{t('page')} {editPage} {t('of')} {sizes.length}" onSave={edited} onCancel={() => (mode = 'view')} />
     {/if}
@@ -197,7 +198,7 @@
   {:else if mode === 'organize'}
   <div class="orgwrap">
     {#if applying}<p class="applying" role="status">{t('applying')}</p>{/if}
-    <Organize bind:this={organize} bind:changed={organized} {pool} {sizes} {name} {extra} />
+    <Organize bind:this={organize} bind:changed={organized} {pool} {sizes} {name} {extra} {at} />
   </div>
   {:else}
   <div class="tools">
