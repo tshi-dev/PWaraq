@@ -1,12 +1,12 @@
 {
-  "version": "1.0.0-beta.4",
-  "notes": "Waraq 1.0 beta 4: new start screen with 8 modes, Move area, Layers in Edit, small files after editing.",
-  "pub_date": "2026-11-03T14:45:57.626Z",
+  "version": "1.0.0-beta.5",
+  "notes": "Waraq 1.0 beta 5: Images to PDF, Check before sharing, select several in Edit, no more false crash messages, better on phones.",
+  "pub_date": "2026-11-10T17:20:46.899Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUd2NrcUVpMEdjZ0xPbFFSaVBVUXYvd1NzREs3c3A3bUVydFY4U3BqQjNIbnZlaEkzRjNHakNlNE1jbXZuUUhVTkdWUG4zaWZyRy81Z2RNWXdCbHdvN2VISTIrd0Y3dmdvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzNzE2ODk2CWZpbGU6V2FyYXFfMS4wLjAtYmV0YS40X3g2NC1zZXR1cC5leGUJdmVyc2lvbjoxLjAuMC1iZXRhLjQKMDZjNis0enBtZ1hMUFptdDZUaldTd0ZEa01VUTBRMGRjNEJScTVRWXM3V050NXJLbDlYMktHc2lvb1BMUGp4WE5DWm1GTURBUWR4anJueDZzZEd2RFE9PQo=",
-      "url": "https://github.com/tshi-dev/PWaraq/releases/download/v1.0.0-beta.4/Waraq_1.0.0-beta.4_x64-setup.exe",
-      "sha256": "200a5282a4b77f0c41e6d0347f6bc9b1ca360a6f2bd340e5a713a701c3b4477e"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUd2NrcUVpMEdjZ0psNGVFT3hwWitJRURoRFIrY1pLNGpDV0ZqaHpBUHZ0ak84QXVDRnBaWkdidFRKV1dMMml3aXFEZkk1bFpKejRVN1JYd1VFSUxObjZneit5YWt4enc0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk0MzMwODI4CWZpbGU6V2FyYXFfMS4wLjAtYmV0YS41X3g2NC1zZXR1cC5leGUJdmVyc2lvbjoxLjAuMC1iZXRhLjUKUzhRWjRSTEE3S1gwQzZyWHRybjhwNUFZMjUvSldpZ2RkRVJSN3RHVjFoU0JkQk9ycW1YNGtFRU54ZGk3OUgrWXBFeDZ4dFBESEZjT2hVRDRpcmhNRFE9PQo=",
+      "url": "https://github.com/tshi-dev/PWaraq/releases/download/v1.0.0-beta.5/Waraq_1.0.0-beta.5_x64-setup.exe",
+      "sha256": "9815ff56f022ba61e58e92011e229008cbde7a42709e2411f078ad9035a1811e"
     }
   }
 }

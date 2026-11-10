@@ -490,3 +490,41 @@ Silent install into `C:\Users\Abdullah\AppData\Local\WaraqInstallTest` (per-user
 | .waraq association removed | pass |  |
 | right-click entries removed | pass |  |
 | rollback copies removed | pass |  |
+
+## Installer test — 2026-11-10 20:15 — Waraq_1.0.0-beta.5_x64-setup.exe
+
+Silent install into `C:\Users\Abdullah\AppData\Local\WaraqInstallTest` (per-user), launch by file, silent uninstall. 29 checks, 1 failed.
+
+| Check | Result | Note |
+|---|---|---|
+| silent install exits 0 | pass | exit 0 |
+| waraq.exe installed | pass |  |
+| uninstall.exe installed | pass |  |
+| Start menu shortcut | pass |  |
+| desktop shortcut (silent installs create it) | pass |  |
+| uninstall entry (per-user) | pass | version 1.0.0-beta.5 |
+| uninstall entry points at the test dir | pass |  |
+| .pdf default handler untouched | pass | before='' after='' |
+| .pdf offered: OpenWithProgids\Waraq.PDF | pass |  |
+| Waraq.PDF open command | pass |  |
+| .waraq associated (Waraq.Portfolio) | pass |  |
+| Waraq.Portfolio open command | pass |  |
+| right-click 'Open in Waraq' on .pdf | pass |  |
+| right-click 'Open in Waraq' on .waraq | pass |  |
+| installer copy kept for rollback | pass |  |
+| PDF opens Waraq via the right-click verb | pass | 1 process(es) |
+| window shows the document (screenshot) | **FAIL** | FAIL top=#1e2b26 page: white 0% dark 6 px, window 16x16 edge: (24,0)= (200,0)= (8,0)=#211302 (24,2)=#211302 (200,2)=#211302 (8,2)=#211303 |
+| second file goes to the running window (single instance) | pass | 1 process(es) |
+| silent uninstall exits 0 | pass | exit 0 |
+| install folder removed | pass |  |
+| Start menu shortcut removed | pass |  |
+| desktop shortcut removed | pass |  |
+| uninstall entry removed | pass |  |
+| Waraq.PDF removed | pass |  |
+| OpenWithProgids\Waraq.PDF removed | pass |  |
+| .pdf default handler still untouched | pass |  |
+| .waraq association removed | pass |  |
+| right-click entries removed | pass |  |
+| rollback copies removed | pass |  |
+
+Note (10 Nov 2026, beta 5): the one failed check, "window shows the document (screenshot)", is the probe, not the app. The test ran while the PC was in use and the window was not in front, so the probe measured a 16x16 helper window. Launched again by hand: the window opens, three.pdf is drawn (white page 99 %, dark text), Graphite theme; the top strip differs from the token by 1/255 (#2b2d32 against #2a2d32), not visible. The older installed build behaves the same.

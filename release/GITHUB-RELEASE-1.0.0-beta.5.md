@@ -16,7 +16,7 @@ New in beta 5:
 
 Problems? https://www.pwaraq.com/support or support@pwaraq.com
 
-SHA-256 of the installer: `<filled in after the owner's build>`
+SHA-256 of the installer: `9815ff56f022ba61e58e92011e229008cbde7a42709e2411f078ad9035a1811e`
 
 ---
 
