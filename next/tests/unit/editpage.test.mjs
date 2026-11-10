@@ -247,3 +247,16 @@ test('layers: two overlapping moved areas are drawn in the order z gives, whatev
   assert.ok(isRed(at([a, b])) && isRed(at([{ ...a, z: 0 }, { ...b, z: 1 }])), 'b on top');
   assert.ok(isBlue(at([{ ...a, z: 1 }, { ...b, z: 0 }])) && isBlue(at([{ ...b, z: 0 }, { ...a, z: 1 }])), 'swapped: a on top, also when it is listed last');
 });
+
+test('deleted lines of the page are taken out of the PDF, not covered: their text is gone, the other lines and the photos stay', () => {
+  // as the editor sends a deleted line: a text edit from the line's box with no text
+  const gone = (l) => ({ kind: 'text', from: { x: l.x, y: l.y, w: l.w, h: l.h }, text: '', size: l.size, color: l.color, bold: false, align: 'left', x: l.x, y: l.y, w: l.w, h: l.h, removed: true });
+  for (const [f, del] of [['edit.pdf', [0]], ['arabic/edge-arial.pdf', [1, 3, 5]]]) {
+    const doc = new m.PDFDocument(read(f)), before = pageObjects(doc.loadPage(0));
+    const after = pageObjects(apply(before.lines.filter((_, i) => del.includes(i)).map(gone), doc));
+    const texts = after.lines.map((l) => l.text);
+    for (const i of del) assert.ok(!texts.includes(before.lines[i].text), `${f}: ${before.lines[i].text}`);
+    assert.deepEqual(texts, before.lines.filter((_, i) => !del.includes(i)).map((l) => l.text), f);
+    assert.equal(after.images.length, before.images.length, f);
+  }
+});

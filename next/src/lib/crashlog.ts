@@ -40,6 +40,7 @@ export async function record(kind: Kind, err: { message?: unknown; stack?: unkno
       theme: document.documentElement.dataset.theme ?? 'light', task: previous?.task ?? context.task, job, message,
       stack: typeof err === 'string' ? undefined : cleanStack(err?.stack, context.names) || undefined, log: previous?.log ?? [...log] };
     await vault.put(`${DIR}/${entry.id}.json`, JSON.stringify(entry));
+    note(`${kind}: ${message}`); // if this run then ends without a clean exit, that entry shows what went wrong
     await prune();
   } catch { /* the log must never be the thing that crashes */ }
 }
@@ -77,7 +78,7 @@ export function install() {
   addEventListener('error', (e) => { if (!/ResizeObserver/.test(e.message)) record('error', e.error ?? e.message); });
   addEventListener('unhandledrejection', (e) => {
     const r = e.reason, text = String(r?.message ?? r);
-    if (r?.name === 'AbortError' || /^(cancelled|CRASHED)$/.test(text)) return; // a closed picker, a job the app dropped itself
+    if (r?.name === 'AbortError' || /^(cancelled|CRASHED|ENGINE_STOPPED)$/.test(text)) return; // a closed picker, a job the app dropped itself
     record('rejection', r instanceof Error ? r : text);
   });
   setInterval(() => { if (dirty) { dirty = false; save(LAST + '-log', log); } }, 2000);

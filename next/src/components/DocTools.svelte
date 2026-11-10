@@ -1,27 +1,37 @@
+<script lang="ts" module>
+  // set before a fix reloads the document (the workspace is built again): the new workspace checks the file again and says so
+  let after = '';
+  // across the reload a fix causes: the ids fixed so far (they keep a done tick), the ids "Fix all" still has to do, and the last scan (kept while the person looks at a page)
+  import { fingerprint } from '../lib/fingerprint';
+  import type { Finding } from '../lib/engine/checkshare';
+  let fixed: string[] = [], queue: string[] = [], seen: { key: string; report: Finding[] } | null = null;
+</script>
+
 <script lang="ts">
   // Whole-document tools, one screen per task: page numbers and watermark (Edit → Whole document), pages
   // as images (Convert), password protect and unlock (Protect). A preview of page 1 on the left, options on the right.
   // Changes to the document itself go to `onReplace` (then Save as usual); copies (smaller, protected, images) are saved
   // as new files and the open document stays as it is.
-  import type { EnginePool } from '../lib/engine/pool';
-  import { i18n, t } from '../lib/i18n.svelte';
+  import { isCancelled, type EnginePool } from '../lib/engine/pool';
+  import { onMount } from 'svelte';
+  import { i18n, t, type Key } from '../lib/i18n.svelte';
+  import { mb } from '../lib/size';
   import { icon } from '../lib/icons.js';
   import { saveFile } from '../lib/store';
   import { CONVERTIBLE_ACCEPT, desktop, toPdf } from '../lib/convert';
   import { zip } from '../lib/zip';
   import { addUnique } from '../lib/names';
 
-  let { pool, kind, sizes, name, bytes, password, onReplace }: { pool: EnginePool; kind: 'stamp' | 'convert' | 'protect';
-    sizes: { w: number; h: number }[]; name: string; bytes: Uint8Array; password?: string; onReplace: (bytes: Uint8Array) => Promise<void> } = $props();
+  let { pool, kind, sizes, name, bytes, password, onReplace, onGoto }: { pool: EnginePool; kind: 'stamp' | 'convert' | 'protect';
+    sizes: { w: number; h: number }[]; name: string; bytes: Uint8Array; password?: string; onReplace: (bytes: Uint8Array, password?: string, task?: 'protect') => Promise<void>; onGoto?: (page: number) => void } = $props();
   const base = $derived(name.replace(/\.pdf$/i, ''));
   let busy = $state(''), note = $state(''), error = $state('');
   async function run(label: string, job: () => Promise<void>) {
     busy = label; error = ''; note = '';
-    try { await job(); } catch (e) { const msg = String((e as Error)?.message); error = /NEED_OWNER/.test(msg) ? t('needOwner') : /PASSWORD/.test(msg) ? t('wrongPassword') : t('toolFailed'); }
+    try { await job(); } catch (e) { const msg = String((e as Error)?.message); error = isCancelled(e) ? '' : /NEED_OWNER/.test(msg) ? t('needOwner') : /PASSWORD/.test(msg) ? t('wrongPassword') : t('toolFailed'); }
     busy = '';
   }
   const all = () => sizes.map((_, page) => ({ doc: 0, page }));
-  const mb = (n: number) => (n / 1048576).toLocaleString(i18n.lang, { maximumFractionDigits: 1 }) + ' MB';
 
   // preview: page 1, with the numbers and the watermark drawn over it as they will appear
   const P = 300, s0 = $derived(sizes[0]), k = $derived(Math.min(P / s0.w, (P * 1.35) / s0.h));
@@ -77,6 +87,35 @@
   $effect(() => { pool.tool<typeof held>('guard', { bytes: bytes.slice(), current: password ?? '' }).then((g) => (held = g)).catch(() => {}); });
   const limited = $derived(!!held?.restricted && !held.owner);
   const copyAs = () => run(t('applying'), async () => { await saveFile(bytes, `${base} (${t('copyWord')}).pdf`); });
+
+  // Check before sharing (Protect): the scan runs in the engine; each fix replaces the open document (Save as usual, protection kept like Organize does)
+  let report = $state<Finding[] | null>(null), doneIds = $state<string[]>([...fixed]);
+  const issues = $derived((report ?? []).filter((f) => f.id !== 'ocr'));
+  const gone = $derived(doneIds.filter((id) => !(report ?? []).some((f) => f.id === id)));
+  const SAFE = ['fake', 'meta', 'comments', 'files', 'script']; // fixes that lose nothing the person wants and do not clash; clearing answers, bookmarks and a smaller copy stay one by one
+  const fixable = $derived(issues.filter((f) => f.fix && SAFE.includes(f.id)));
+  const ICON: Record<string, string> = { fake: 'redact', white: 'eye', outside: 'extract', tiny: 'search', invisible: 'eye', ocr: 'ocr', meta: 'metadata', comments: 'annotate', forms: 'forms', files: 'link', script: 'warning', layers: 'layers', bookmarks: 'bookmarks', size: 'compress' };
+  const key = () => name + ':' + bytes.length + ':' + fingerprint(bytes);
+  const scan = () => run(t('chkChecking'), async () => { report = await pool.tool<Finding[]>('checkscan', { bytes: bytes.slice(), password: password ?? '' }); seen = { key: key(), report }; });
+  const check = () => { fixed = []; doneIds = []; queue = []; return scan(); };
+  const mend = (f: Finding) => run(t('applying'), async () => {
+    try {
+      const out = await pool.tool('checkfix', { bytes: bytes.slice(), password: password ?? '', kind: f.id });
+      if (f.id === 'size' && out.length >= bytes.length) { note = t('chkNoSmaller'); return; }
+      after = t('chkDone'); fixed = [...fixed, f.id];
+      await onReplace(await pool.keep(out), password, 'protect'); // like Organize: a file opened with only its open password keeps it too
+    } catch (e) { after = ''; queue = []; fixed = fixed.filter((x) => x !== f.id); throw e; } // a failed fix also ends Fix all (no stale queue left for a later single fix)
+  });
+  // Fix all: one fix at a time (each one opens the document again and checks it again), then the next in the queue
+  const next = async (): Promise<void> => { const f = issues.find((x) => x.id === queue.shift()); if (f) await mend(f); else if (queue.length) await next(); };
+  const fixAll = () => { queue = fixable.map((f) => f.id); return next(); };
+  onMount(() => {
+    if (after && kind === 'protect') { const msg = after; after = ''; scan().then(() => { note = msg; if (queue.length) next(); }); }
+    else { after = ''; if (seen?.key === key()) report = seen.report; }
+  });
+  const pagesOf = (f: Finding) => [...new Set(f.pages)];
+  const say = (f: Finding) => t(`chk_${f.id}` as Key).replace('{n}', f.n.toLocaleString(i18n.lang));
+  const shown = (v: string) => v.replace(/^D:(\d{4})(\d\d)(\d\d).*$/, '$1-$2-$3');
   const free = () => run(t('applying'), async () => { await onReplace(await pool.tool('unlock', { bytes: bytes.slice(), password: password ?? '' })); });
 </script>
 
@@ -90,7 +129,7 @@
         {#if numbersOn}<span class="pno num {position}">{label}</span>{/if}
       {/if}
     </div>
-    <p class="muted num">{sizes.length} {t('pagesCount')} · {mb(bytes.length)}</p>
+    <p class="muted num">{t(sizes.length === 1 ? 'docInfoOne' : 'docInfoMany').replace('{n}', String(sizes.length)).replace('{size}', mb(bytes.length))}</p>
   </section>
 
   <aside class="side">
@@ -133,10 +172,33 @@
       <label class="btn" class:disabled={!canOffice || !!busy}>{@html icon('upload')}{t('officeChoose')}
         <input type="file" accept={CONVERTIBLE_ACCEPT} hidden disabled={!canOffice || !!busy} onchange={office} /></label>
     {:else}
+      <div class="ph"><h2>{t('chkTitle')}</h2><p>{t('chkHelp')}</p></div>
+      {#if report}
+        {#if issues.length}<p class="sum" role="status">{@html icon('warning')}{issues.length === 1 ? t('chkFoundOne') : t('chkFound').replace('{n}', issues.length.toLocaleString(i18n.lang))}</p>
+        {:else}<p class="clean" role="status">{@html icon('check')}<span><b>{t('chkSafe')}</b><br />{t('chkClean')}</span></p>{/if}
+        <ul class="finds" aria-label={t('chkTitle')}>
+          {#each report as f (f.id)}
+            <li class:fine={f.id === 'ocr'}>
+              <span class="ic" class:risk={f.id !== 'ocr'}>{@html icon(ICON[f.id])}</span>
+              <div class="body">
+                <h3>{t(`chkh_${f.id}` as Key)}</h3>
+                <p>{say(f)}</p>
+                {#if f.items.length}<ul class="items">{#each f.items as [k, v]}<li><span>{t(`chk_m_${k}` as Key)}</span>{#if v}<bdi>{shown(v)}</bdi>{/if}</li>{/each}</ul>{/if}
+                {#if pagesOf(f).length && onGoto}<div class="pages">{#each pagesOf(f).slice(0, 8) as p}<button class="btn num" onclick={() => onGoto(p)} aria-label={t('goPageN').replace('{n}', String(p))}>{t('pageN').replace('{n}', String(p))}</button>{/each}{#if pagesOf(f).length > 8}<span class="muted">…</span>{/if}</div>{/if}
+                {#if f.fix && !limited}<button class="btn" onclick={() => mend(f)} disabled={!!busy}>{t(`chk_${f.id}_fix` as Key)}</button>{/if}
+              </div>
+            </li>
+          {/each}
+          {#each gone as id (id)}
+            <li class="done"><span class="ic">{@html icon('check')}</span><div class="body"><h3>{t(`chkh_${id}` as Key)}</h3><p>{t('chkFixed')}</p></div></li>
+          {/each}
+        </ul>
+        {#if limited && issues.some((f) => f.fix)}<p class="help">{t('chkLimited')}</p>{/if}
+      {/if}
       {#if limited}
       <h2>{t('limitedTitle')}</h2>
       <p class="help">{t('limitedHelp')}</p>
-      <button class="btn primary" onclick={copyAs} disabled={!!busy}>{@html icon('download')}{t('copySave')}</button>
+      <button class="btn" onclick={copyAs} disabled={!!busy}>{@html icon('download')}{t('copySave')}</button>
       {:else}
       <h2>{t('protectTitle')}</h2>
       <p class="help">{t('protectHelp')}</p>
@@ -145,7 +207,7 @@
       {#if pw.includes(',')}<p class="error">{t('noComma')}</p>{/if}
       <label class="switch"><input type="checkbox" bind:checked={print} />{t('allowPrint')}</label>
       <label class="switch"><input type="checkbox" bind:checked={copy} />{t('allowCopy')}</label>
-      <button class="btn primary" onclick={lock} disabled={!!busy || !pwOk}>{@html icon('protect')}{t('protectSave')}</button>
+      <button class="btn" onclick={lock} disabled={!!busy || !pwOk}>{@html icon('protect')}{t('protectSave')}</button>
       <h2>{t('unlockTitle')}</h2>
       {#if password}
         <p class="help">{t('unlockHelp')}</p>
@@ -153,13 +215,20 @@
       {:else}<p class="help">{t('notLocked')}</p>{/if}
       {/if}
     {/if}
-    <p class="state num" aria-live="polite">{busy || note}</p>
-    {#if error}<p class="error" role="alert">{error}</p>{/if}
+    <div class="pf">
+      {#if kind === 'protect'}
+        {#if !report}<button class="btn primary" onclick={check} disabled={!!busy}>{@html icon('search')}{t('chkRun')}</button>
+        {:else if fixable.length && !limited}<button class="btn primary" onclick={fixAll} disabled={!!busy}>{@html icon('check')}{t('chkFixAll')}</button>
+        {:else}<button class="btn" onclick={check} disabled={!!busy}>{@html icon('search')}{t('chkAgain')}</button>{/if}
+      {/if}
+      <p class="state num" aria-live="polite">{busy || note}</p>
+      {#if error}<p class="error" role="alert">{error}</p>{/if}
+    </div>
   </aside>
 </div>
 
 <style>
-  .tools { height: 100%; display: grid; grid-template-columns: 1fr 340px; min-height: 0; }
+  .tools { height: 100%; display: grid; grid-template-columns: 1fr var(--panel); min-height: 0; }
   .preview { display: grid; place-content: center; justify-items: center; gap: var(--s-12); background: var(--canvas); padding: var(--s-24); overflow: auto; }
   .sheet { position: relative; background: #fff; box-shadow: var(--shadow); overflow: hidden; }
   .sheet canvas { width: 100%; height: 100%; display: block; }
@@ -171,8 +240,6 @@
   .pno.bc, .pno.tc { left: 50%; transform: translateX(-50%); } .pno.bl, .pno.tl { left: 8px; } .pno.br, .pno.tr { right: 8px; }
   .pno.bl, .pno.bc, .pno.br { bottom: 6px; } .pno.tl, .pno.tc, .pno.tr { top: 6px; }
   .muted { margin: 0; color: var(--muted); }
-  .side { display: flex; flex-direction: column; gap: var(--s-12); padding: var(--s-16); background: var(--surface); border-inline-start: 1px solid var(--line); overflow-y: auto; }
-  h2 { margin: var(--s-8) 0 0; font-size: var(--fs-18); }
   .help { margin: 0; color: var(--muted); }
   .field { display: grid; gap: var(--s-8); font-weight: 600; }
   .field input:not([type='range']), .field select { min-height: var(--control); padding: 0 var(--s-12); border: 1px solid var(--line); border-radius: var(--r-8); background: var(--paper); font-weight: 400; }
@@ -181,8 +248,23 @@
   .switch, .choice { display: flex; align-items: center; gap: var(--s-8); min-height: var(--control); font-weight: 600; }
   .switch input { flex: none; width: 20px; height: 20px; accent-color: var(--green); }
   .grow { flex: 1; }
+  .clean, .sum { display: flex; gap: var(--s-8); align-items: flex-start; margin: 0; font-weight: 600; }
+  .clean { color: var(--green); } .clean b { font-size: var(--fs-16); } .clean span { font-weight: 400; color: var(--muted); } .clean b { color: var(--green); }
+  .finds, .items { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--s-8); }
+  .finds > li { display: flex; gap: var(--s-12); align-items: flex-start; padding: var(--s-12); border: 1px solid var(--line); border-radius: var(--r-8); background: var(--paper); }
+  .finds .body { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-8); min-width: 0; } /* the page links and the fix button share a line when they fit */
+  .finds .body > h3, .finds .body > p, .finds .body > .items { flex: 1 0 100%; }
+  .finds h3 { margin: 0; font-size: var(--fs-14); font-weight: 600; }
+  .finds p { margin: 0; color: var(--muted); }
+  .finds .ic { flex: none; display: grid; place-items: center; color: var(--green); }
+  .finds .ic.risk { color: var(--danger); }
+  .finds .fine, .finds .done { background: var(--green-soft); }
+  .pages { display: flex; flex-wrap: wrap; gap: var(--s-8); align-items: center; }
+  .items { gap: var(--s-4); font-size: var(--fs-12); color: var(--muted); }
+  .items span::after { content: ': '; }
+  .items bdi { color: var(--ink); }
   label.btn { cursor: pointer; } label.btn.disabled { opacity: 0.5; cursor: not-allowed; }
   .state { margin: 0; color: var(--muted); font-size: var(--fs-12); min-height: 18px; }
   .error { margin: 0; color: var(--danger); }
-  @media (max-width: 900px) { .tools { grid-template-columns: 1fr; grid-template-rows: auto 1fr; } .side { border-inline-start: 0; border-top: 1px solid var(--line); } }
+  @media (max-width: 900px) { .tools { display: block; overflow-y: auto; } .side { overflow: visible; border-inline-start: 0; border-top: 1px solid var(--line); } } /* one scroll for the preview and the options (no small inner scroll on a phone); the footer stays pinned */
 </style>

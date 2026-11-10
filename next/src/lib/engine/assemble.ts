@@ -113,14 +113,40 @@ function writeMeta(out: MuPDF.PDFDocument, meta: Meta) {
   root.put('Metadata', out.addStream(packet, { Type: 'Metadata', Subtype: 'XML' }));
 }
 
-// A photo or scan as a page: the page has the neighbouring pages' size (`fit`), the image fills it keeping its shape.
+/** Photos as a new PDF, one page each in its own shape (Images to PDF): built in one engine, the photos are not opened in all. */
+export function imagesPdf(m: typeof MuPDF, files: { bytes: Uint8Array; mime: string }[]): Uint8Array {
+  const docs = files.map((f) => ({ doc: m.Document.openDocument(f.bytes, f.mime), bytes: f.bytes }));
+  try { return assemble(m, (i) => docs[i], { items: docs.map((_, i) => ({ doc: i, page: 0 })) }); }
+  finally { docs.forEach((d) => d.doc.destroy()); }
+}
+
+/** The EXIF orientation of a JPEG (1-8: how the camera held it), 1 when there is none or the file is not a JPEG. */
+export function orientation(b: Uint8Array): number {
+  try {
+    const v = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    if (v.getUint16(0) !== 0xffd8) return 1;
+    for (let i = 2; b[i] === 0xff && b[i + 1] !== 0xda; i += 2 + v.getUint16(i + 2)) { // segments up to the image data
+      if (b[i + 1] !== 0xe1 || v.getUint32(i + 4) !== 0x45786966) continue; // APP1 "Exif"
+      const t = i + 10, le = v.getUint16(t) === 0x4949, ifd = t + v.getUint32(t + 4, le);
+      for (let n = v.getUint16(ifd, le), e = ifd + 2; n-- > 0; e += 12) if (v.getUint16(e, le) === 0x0112) { const o = v.getUint16(e + 8, le); return o >= 1 && o <= 8 ? o : 1; }
+      return 1;
+    }
+  } catch { /* cut short or damaged: as stored */ }
+  return 1;
+}
+// image square -> page box as seen, per EXIF orientation: [a b c d e f] in units of the box (5-8 are turned a quarter)
+const TURN = [[], [1, 0, 0, 1, 0, 0], [-1, 0, 0, 1, 1, 0], [-1, 0, 0, -1, 1, 1], [1, 0, 0, -1, 0, 1], [0, -1, -1, 0, 1, 1], [0, -1, 1, 0, 0, 1], [0, 1, 1, 0, 0, 0], [0, 1, -1, 0, 1, 0]];
+
+// A photo or scan as a page: the page has the neighbouring pages' size (`fit`), the image fills it keeping its shape,
+// upright as the camera held it (PDF readers ignore EXIF, so the turn is drawn).
 function imagePage(m: typeof MuPDF, out: MuPDF.PDFDocument, images: Map<number, MuPDF.PDFObject>, it: Item, bytes: Uint8Array) {
-  const img = new m.Image(bytes);
-  const iw = (img.getWidth() * 72) / (img.getXResolution() || 96), ih = (img.getHeight() * 72) / (img.getYResolution() || 96);
+  const img = new m.Image(bytes), o = orientation(bytes);
+  const sw = (img.getWidth() * 72) / (img.getXResolution() || 96), sh = (img.getHeight() * 72) / (img.getYResolution() || 96), [iw, ih] = o >= 5 ? [sh, sw] : [sw, sh];
   const pw = it.fit?.w ?? iw, ph = it.fit?.h ?? ih, k = Math.min(pw / iw, ph / ih), w = iw * k, h = ih * k;
   let ref = images.get(it.doc!);
   if (!ref) images.set(it.doc!, (ref = out.addImage(img)));
-  const page = out.addPage([0, 0, pw, ph], 0, { XObject: { Im0: ref } }, `q ${w.toFixed(2)} 0 0 ${h.toFixed(2)} ${((pw - w) / 2).toFixed(2)} ${((ph - h) / 2).toFixed(2)} cm /Im0 Do Q`);
+  const [a, b, c, d, e, f] = TURN[o], n = (x: number) => x.toFixed(2);
+  const page = out.addPage([0, 0, pw, ph], 0, { XObject: { Im0: ref } }, `q ${n(a * w)} ${n(b * h)} ${n(c * w)} ${n(d * h)} ${n(e * w + (pw - w) / 2)} ${n(f * h + (ph - h) / 2)} cm /Im0 Do Q`);
   out.insertPage(-1, page);
 }
 

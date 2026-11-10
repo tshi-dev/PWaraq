@@ -1,13 +1,14 @@
 // One MuPDF engine in a background thread. Pages are read once into display lists (kept, least recently used
 // first out), so drawing again at another zoom or drawing a zoom tile does not re-read the PDF.
 import type * as MuPDF from '../../../engine/mupdf-wasm/dist/mupdf.js';
-import { assemble } from './assemble';
+import { assemble, imagesPdf } from './assemble';
 import { compress, protect, unlock, guardOf, sealLikeSource, decrypt } from './tools';
 import { editPage, pageObjects, pictureOf, type Edit, type Own } from './editpage';
 import { findSpots, signPdf } from './sign';
 import { listSignatures, prepareSignature } from './signcert';
 import { findMatches, redact } from './redact';
 import { fillForm, listFields } from './forms';
+import { scan as checkScan, fix as checkFix } from './checkshare';
 import { addTextLayer } from './ocr';
 import { applyAnnots, listAnnots } from './annots';
 import type { Fonts } from './textpage';
@@ -150,16 +151,21 @@ const ops: Record<string, (r: Req) => any> = {
     if (r.build.watermark || r.build.numberStyle?.digits === 'arab' || r.build.items.some((it: any) => it.divider || it.toc || it.cover || (it.blank && it.paper))) await loadFonts();
     return assemble(mupdf, source, r.build, () => fonts!);
   },
+  // photos (bytes, mime) as a new PDF, without opening them as sources
+  images(r) { return imagesPdf(mupdf, r.files); },
   // whole-file tools (Convert, Protect)
-  compress(r) { return compress(mupdf, r.bytes, r.level, r.current); },
+  compress(r) { return compress(mupdf, r.bytes, r.level, r.current, r.open); },
   protect(r) { return protect(mupdf, r.bytes, r.password, r.print, r.copy, r.current); },
   // protection of the open document, and a new copy `bytes` of it protected the same way (Extract, Split, Save as copy)
-  guard(r) { const g = guardOf(mupdf, r.bytes, r.current); return g && { restricted: g.restricted, owner: g.owner }; },
-  seal(r) { return sealLikeSource(mupdf, r.bytes, r.src, r.current); },
+  guard(r) { const g = guardOf(mupdf, r.bytes, r.current); return g && { restricted: g.restricted, owner: g.owner, open: g.open !== null }; },
+  seal(r) { return sealLikeSource(mupdf, r.bytes, r.src, r.current, r.open); },
   unlock(r) { return unlock(mupdf, r.bytes, r.password); },
   // redaction: boxes of phone numbers / e-mails / a word on a page, and the file with the marked areas removed
   redactfind(r) { const p = source(r.doc).doc.loadPage(r.page); try { return findMatches(p, r.kind, r.query); } finally { p.destroy(); } },
   redact(r) { return redact(mupdf, r.bytes, r.marks, { metadata: r.metadata }); },
+  // check before sharing: what the file gives away, and the file with one kind removed (both on the decrypted file)
+  checkscan(r) { return checkScan(mupdf, r.password ? decrypt(mupdf, r.bytes, r.password) : r.bytes); },
+  checkfix(r) { return checkFix(mupdf, r.password ? decrypt(mupdf, r.bytes, r.password) : r.bytes, r.kind); },
   // forms: the fields of the file in `bytes`, and the file with the answers written into them
   formfields(r) { return listFields(mupdf, r.bytes); },
   async fillform(r) { await loadFonts(); return fillForm(mupdf, r.bytes, r.answers, r.flatten, fonts!); },

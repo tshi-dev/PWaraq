@@ -53,6 +53,12 @@ for (const [lang, theme] of COMBOS) test(`design rules hold on every screen (${l
   await expect(page.locator('.editor .swatch').first()).toBeVisible();
   await clean(page, 'editor text options');
   await page.screenshot({ path: info.outputPath(`editor-${lang}-${theme}.png`) });
+  await choose(page, () => page.locator('.editor .tools .btn').nth(2).click(), [fixture('photo.png')]); // a photo gives the Layers panel a row
+  await expect(page.locator('.layers .pick').first()).toBeVisible();
+  await page.locator('.layers .pick').first().click(); // Layers open, a row selected (its fill sits on the row button, 8 px from the eye)
+  await expect(page.locator('.layers li.on')).toHaveCount(1);
+  await clean(page, 'editor layers');
+  await page.screenshot({ path: info.outputPath(`layers-${lang}-${theme}.png`) });
   await page.locator('.editor .tools .btn').nth(8).click(); // Cancel
   await expect(page.locator('.cell')).toHaveCount(3);
 

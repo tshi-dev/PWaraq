@@ -26,9 +26,11 @@ while ($true) {   # GPU rounds over the pages that are there
   if ((Get-Date) -ge $SweepAt) { Note "sweep time ($SweepAt) reached"; break }
   if ($new -eq 0) { Start-Sleep 600 }     # waiting for pages
 }
+$old = Join-Path $work ('sweep-before-' + $SweepAt.ToString('yyyy-MM-dd')); New-Item -ItemType Directory -Force $old | Out-Null
+Get-ChildItem "$work\models\ara_[A-Z]p.traineddata.gz", "$work\results\*-ara_[A-Z]p.log" -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -lt $SweepAt } | Move-Item -Destination $old -Force   # the earlier sweep's models and logs: kept, but the pipeline skips a model that exists
 for ($try = 1; $try -le 30; $try++) {   # the sweep: train in WSL, measure, verdicts in SUMMARY.md
   try {
-    & (Join-Path $PSScriptRoot 'run-pipeline.ps1') -Work $work -Offsets @() -Full -Variants 'A:10000:0.0001','B:20000:0.00005','C:6000:0.0002','D:30000:0.00005','E:10000:0.00003','F:30000:0.00005:modern'   # F = D + 30 % modern-font lines (synth.py modern)
+    & (Join-Path $PSScriptRoot 'run-pipeline.ps1') -Work $work -Offsets @() -Full -Variants 'A:10000:0.0001','B:20000:0.00005','C:6000:0.0002','D:30000:0.00005','E:10000:0.00003','F:30000:0.00005:modern','G:30000:0.00005:modern50','H:30000:0.00005:modern70'   # F = D + 30 % modern-font lines (synth.py modern), G = 50 %, H = 70 %; halfway checks: F +0.3 (9 Nov), G +0.8, F at 60,000 steps -1.3 (10 Nov)
     Note 'finished'; Set-Content (Join-Path $work 'DONE') (Get-Date); break
   } catch { Note "sweep FAILED: $($_.Exception.Message)"; Start-Sleep 600 }
 }

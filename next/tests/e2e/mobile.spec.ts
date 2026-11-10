@@ -105,3 +105,45 @@ for (const lang of ['en', 'ar'] as const) test(`touch: View on iPhone 14 (${lang
   await ctx.close();
 });
 
+
+// Comment and Edit on a 390 x 844 phone: the tools are one row that scrolls sideways, the options are the bottom sheet, the page keeps >= 60 % of the screen
+for (const lang of ['en', 'ar'] as const) for (const task of ['Comment', 'Edit'] as const) test(`touch: ${task} on a 390 px phone (${lang}): the page takes at least 60 % of the screen`, async ({ browser }, info) => {
+  test.setTimeout(120_000);
+  const names = { Comment: ['Comment', 'تعليق'], Edit: ['Edit', 'تحرير'] }[task];
+  const ctx = await browser.newContext({ ...DEVICES[0][1], viewport: { width: 390, height: 844 }, locale: lang === 'ar' ? 'ar-SA' : 'en-US', baseURL: info.project.use.baseURL });
+  await ctx.addInitScript((l) => localStorage.setItem('waraq-lang', l), lang);
+  const page = await ctx.newPage();
+  await page.goto('/');
+  await page.locator('input[type=file]').first().setInputFiles(fixture('small.pdf'));
+  await expect(page.locator('.page').first()).toBeVisible({ timeout: 60_000 });
+  await page.getByRole('button', { name: /▾/ }).first().tap();
+  await page.getByRole('menuitem', { name: names[lang === 'en' ? 0 : 1], exact: true }).tap();
+  const box = page.locator(task === 'Comment' ? '.comment .pages' : '.editor .stage');
+  await expect(box).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(task === 'Comment' ? '.comment .layer' : '.editor .sheet').first()).toBeVisible({ timeout: 30_000 });
+  expect((await box.boundingBox())!.height, 'page area').toBeGreaterThanOrEqual(844 * 0.6);
+  const f = await fits(page);
+  expect(f.h, 'no horizontal scroll').toBe(true);
+  expect(((await page.evaluate(audit)) as { sample: unknown[] }).sample).toEqual([]);
+  await page.screenshot({ path: info.outputPath(`${task.toLowerCase()}-390-${lang}.png`) });
+  await page.getByRole('button', { name: lang === 'en' ? 'Show options' : 'إظهار الخيارات' }).tap();
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: info.outputPath(`${task.toLowerCase()}-390-${lang}-sheet.png`) });
+  await ctx.close();
+});
+
+// Tablets and small windows (600–1000 px): the workspace bar never pushes Save, Close or the menus off the screen
+for (const lang of ['en', 'ar'] as const) test(`window widths 990 to 640 (${lang}): every workspace bar button is on screen`, async ({ browser }, info) => {
+  const ctx = await browser.newContext({ viewport: { width: 990, height: 800 }, locale: lang === 'ar' ? 'ar-SA' : 'en-US', baseURL: info.project.use.baseURL });
+  await ctx.addInitScript((l) => localStorage.setItem('waraq-lang', l), lang);
+  const page = await ctx.newPage();
+  await page.goto('/');
+  await page.locator('input[type=file]').first().setInputFiles(fixture('small.pdf'));
+  await expect(page.locator('.page').first()).toBeVisible({ timeout: 60_000 });
+  for (const w of [990, 900, 820, 700, 640]) {
+    await page.setViewportSize({ width: w, height: 800 });
+    await page.waitForTimeout(150);
+    expect((await fits(page)).out, `off screen at ${w} px`).toEqual([]);
+  }
+  await ctx.close();
+});

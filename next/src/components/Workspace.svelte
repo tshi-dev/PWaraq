@@ -1,6 +1,7 @@
 <script lang="ts">
   // The document workspace: one task bar on top, thumbnails on the left, the page in the middle.
-  import type { EnginePool } from '../lib/engine/pool';
+  import { isCancelled, type EnginePool } from '../lib/engine/pool';
+  import { tick } from 'svelte';
   import { t, toggleLanguage, type Key } from '../lib/i18n.svelte';
   import ThemeButton from './ThemeButton.svelte';
   import { icon } from '../lib/icons.js';
@@ -14,6 +15,7 @@
   import Forms from './Forms.svelte';
   import Ocr from './Ocr.svelte';
   import Comment from './Comment.svelte';
+  import ScopeTabs from './ScopeTabs.svelte';
   import { setTask } from '../lib/crashlog';
   import FileName from './FileName.svelte';
   import SaveMenu from './SaveMenu.svelte';
@@ -23,15 +25,15 @@
   import MoreMenu from './MoreMenu.svelte';
 
   let { pool, sizes, name, bytes, modified, password, task, extra, onOpen, onClose, onSave, onSaveAs, onReplace }: { pool: EnginePool; sizes: { w: number; h: number }[]; name: string; bytes: Uint8Array; modified: boolean; password?: string; task?: Key; extra?: File[];
-    onOpen: () => void; onClose: () => void; onSave: () => void; onSaveAs: () => void; onReplace: (bytes: Uint8Array, password?: string) => Promise<void> } = $props();
+    onOpen: () => void; onClose: () => void; onSave: () => void; onSaveAs: () => void; onReplace: (bytes: Uint8Array, password?: string, task?: Key) => Promise<void> } = $props();
   // svelte-ignore state_referenced_locally (a start-screen tile picks the first task; a new document is a new workspace)
   let mode = $state<'view' | 'organize' | 'edit' | 'sign' | 'convert' | 'protect' | 'redact' | 'forms' | 'ocr' | 'comment'>((task as 'view' | undefined) ?? 'view'), editScope = $state<'page' | 'document'>('page'), organize = $state<Organize>(), organized = $state(false), comment = $state<Comment>(), commented = $state(false), applying = $state(false);
   // leaving Organize applies its changes: the document is rebuilt and opened again in View
   async function task_(next: Key) {
     if (next === mode) return;
     if (next === 'organize' && mode === 'view') { mode = 'organize'; return; }
-    if (mode === 'organize' && organized && organize) { applying = true; try { await replaceKept(await organize.build()); } catch { alert(t('toolFailed')); } finally { applying = false; } }
-    else if (mode === 'comment' && commented && comment) { applying = true; try { await replaceKept(await comment.build()); } catch { alert(t('toolFailed')); } finally { applying = false; } }
+    if (mode === 'organize' && organized && organize) { applying = true; try { await replaceKept(await organize.build()); } catch (e) { if (!isCancelled(e)) alert(t('toolFailed')); } finally { applying = false; } }
+    else if (mode === 'comment' && commented && comment) { applying = true; try { await replaceKept(await comment.build()); } catch (e) { if (!isCancelled(e)) alert(t('toolFailed')); } finally { applying = false; } }
     else mode = (['edit', 'organize', 'sign', 'convert', 'protect', 'redact', 'forms', 'ocr', 'comment'].includes(next) ? next : 'view') as typeof mode;
   }
   // Edit: the page editor on the current page; saving puts the edited page in its place and opens the document again
@@ -49,26 +51,28 @@
   }
   async function save(as = false) {
     if ((mode === 'edit' && editScope === 'page') || mode === 'sign') return; // the editor / signing mode saves its page first (Save page)
-    if (mode === 'organize' && organized && organize) { applying = true; try { await replaceKept(await organize.build()); } catch { alert(t('toolFailed')); return; } finally { applying = false; } }
-    if (mode === 'comment' && commented && comment) { applying = true; try { await replaceKept(await comment.build()); } catch { alert(t('toolFailed')); return; } finally { applying = false; } }
+    if (mode === 'organize' && organized && organize) { applying = true; try { await replaceKept(await organize.build()); } catch (e) { if (!isCancelled(e)) alert(t('toolFailed')); return; } finally { applying = false; } }
+    if (mode === 'comment' && commented && comment) { applying = true; try { await replaceKept(await comment.build()); } catch (e) { if (!isCancelled(e)) alert(t('toolFailed')); return; } finally { applying = false; } }
     if (as) onSaveAs(); else onSave();
   }
   let viewer = $state() as Viewer;
+  async function showPage(n: number) { mode = 'view'; await tick(); setTimeout(() => viewer?.goTo(n), 150); } // a page link in the report
   let current = $state(1);
   let showThumbs = $state(true);
   let pageInput = $state('1');
   $effect(() => { pageInput = String(current); });
   const tasks: Key[] = ['view', 'organize', 'edit', 'convert', 'sign', 'protect', 'redact', 'forms', 'ocr', 'comment'];
   // narrow windows: the four rarest tasks go under "More ▾" (the desktop app needs room for its window buttons)
-  let width = $state(1366), moreOpen = $state(false), taskOpen = $state(false);
+  let width = $state(1366), moreOpen = $state(false), taskOpen = $state(false), zoomOpen = $state(false);
   const compact = $derived(width < (isDesktop ? 1360 : 1240)), shown = $derived(compact ? tasks.slice(0, 6) : tasks), hidden = $derived(compact ? tasks.slice(6) : []);
+  const slim = $derived(view.narrow || width < (isDesktop ? 1160 : 1000)); // below this the whole bar does not fit: one task menu and the Save + More pair, as on a phone
   const pending = $derived(organized || commented);
 
   // Find: every page is searched in the background (heavy pages take seconds); matches appear as they come in.
   let findOpen = $state(false), query = $state(''), hits = $state<{ page: number; rects: number[][] }[]>([]), active = $state(0), searching = $state(false);
   let findInput = $state<HTMLInputElement>(), searchRun = 0, findTimer: ReturnType<typeof setTimeout>;
   async function search(q: string) {
-    const run = ++searchRun; hits = []; active = 0; viewer.showHits([], 0);
+    const run = ++searchRun; hits = []; active = 0; viewer?.showHits([], 0);
     if (q.trim().length < 2) return;
     searching = true;
     await Promise.all(sizes.map(async (_, page) => {
@@ -77,12 +81,12 @@
         if (run !== searchRun || !found.length) return;
         const add = found.map((quads) => ({ page, rects: quads.map((q) => { const xs = [q[0], q[2], q[4], q[6]], ys = [q[1], q[3], q[5], q[7]]; return [Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)]; }) }));
         hits = [...hits, ...add].sort((a, b) => a.page - b.page);
-        viewer.showHits(hits, active);
+        viewer?.showHits(hits, active);
       } catch {}
     }));
     if (run === searchRun) searching = false;
   }
-  function step(d: number) { if (!hits.length) return; active = (active + d + hits.length) % hits.length; viewer.showHits(hits, active); }
+  function step(d: number) { if (!hits.length) return; active = (active + d + hits.length) % hits.length; viewer?.showHits(hits, active); }
 
   function onKey(e: KeyboardEvent) {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); return; }
@@ -98,8 +102,8 @@
   <header class="bar" data-tauri-drag-region>
     <img src="/brand-mark.svg" alt="" width="28" height="28" />
     <FileName {name} fill={false} />
-    {#if modified || pending}<span class="mod" title={t('modified')}><span class="dot"></span><span class="sr">{t('modified')}</span></span>{/if}
-    {#if view.phone}
+    <span class="mod" title={modified || pending ? t('modified') : undefined}>{#if modified || pending}<span class="dot"></span><span class="sr">{t('modified')}</span>{/if}</span>
+    {#if slim}
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <nav class="tasks phone" aria-label={t('tasksMenu')} onfocusout={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) taskOpen = false; }} onkeydown={(e) => { if (e.key === 'Escape') taskOpen = false; }}>
       <button class="task on" aria-expanded={taskOpen} aria-haspopup="menu" disabled={applying} onclick={() => (taskOpen = !taskOpen)}>{t(mode)} ▾</button>
@@ -131,7 +135,7 @@
     </nav>
     {/if}
     <span class="grow" data-tauri-drag-region></span>
-    {#if view.phone}
+    {#if slim}
     <span class="end">
       <SaveMenu {pool} {bytes} {name} {password} compact disabled={applying} primary={modified} saveOff={(mode === 'edit' && editScope === 'page') || mode === 'sign'} canShrink={!pending && mode !== 'sign' && !(mode === 'edit' && editScope === 'page')}
         onSave={() => save()} onSaveAs={() => save(true)} />
@@ -155,18 +159,15 @@
     {/if}
   </header>
   {#if mode === 'edit' || mode === 'convert' || mode === 'protect'}
-  <div class="orgwrap" class:scoped={mode === 'edit'}>
+  <div class="orgwrap" class:scoped={mode === 'edit' && editScope === 'document'}>
     {#if applying}<p class="applying" role="status">{t('applying')}</p>{/if}
-    {#if mode === 'edit'}
-      <div class="scope" role="tablist" aria-label={t('edit')}>
-        <button role="tab" aria-selected={editScope === 'page'} class:on={editScope === 'page'} onclick={() => (editScope = 'page')}>{t('thisPage')}</button>
-        <button role="tab" aria-selected={editScope === 'document'} class:on={editScope === 'document'} onclick={() => (editScope = 'document')}>{t('wholeDocument')}</button>
-      </div>
+    {#if mode === 'edit' && editScope === 'document'}
+      <div class="scopeband"><ScopeTabs bind:scope={editScope} /></div>
     {/if}
     {#if mode !== 'edit' || editScope === 'document'}
-    <DocTools {pool} kind={mode === 'edit' ? 'stamp' : mode} {sizes} {name} {bytes} {password} {onReplace} />
+    <DocTools {pool} kind={mode === 'edit' ? 'stamp' : mode} {sizes} {name} {bytes} {password} {onReplace} onGoto={showPage} />
     {:else}
-    <PageEditor {pool} base={{ doc: 0, page: editPage - 1 }} label="{t('page')} {editPage} {t('of')} {sizes.length}" onSave={edited} onCancel={() => (mode = 'view')} />
+    <PageEditor {pool} bind:scope={editScope} base={{ doc: 0, page: editPage - 1 }} label="{t('page')} {editPage} {t('of')} {sizes.length}" onSave={edited} onCancel={() => (mode = 'view')} />
     {/if}
   </div>
   {:else if mode === 'redact'}
@@ -208,10 +209,24 @@
       <span class="num muted">{t('of')} {sizes.length}</span>
     </form>
     <span class="sep"></span>
+    {#if width < 600}
+      <span class="zoommenu" role="presentation" onfocusout={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) zoomOpen = false; }} onkeydown={(e) => { if (e.key === 'Escape') zoomOpen = false; }}>
+        <button class="btn" aria-expanded={zoomOpen} aria-haspopup="menu" onclick={() => (zoomOpen = !zoomOpen)}>{t('zoom')} ▾</button>
+        {#if zoomOpen}
+          <div class="moremenu" role="menu">
+            <button class="task" role="menuitem" onclick={() => { zoomOpen = false; viewer.zoomBy(1.25); }}>{t('zoomIn')}</button>
+            <button class="task" role="menuitem" onclick={() => { zoomOpen = false; viewer.zoomBy(0.8); }}>{t('zoomOut')}</button>
+            <button class="task" role="menuitem" onclick={() => { zoomOpen = false; viewer.zoomTo('width'); }}>{t('fitWidth')}</button>
+            <button class="task" role="menuitem" onclick={() => { zoomOpen = false; viewer.zoomTo('page'); }}>{t('fitPage')}</button>
+          </div>
+        {/if}
+      </span>
+    {:else}
     <button class="btn icon" onclick={() => viewer.zoomBy(0.8)} title={t('zoomOut')} aria-label={t('zoomOut')}>−</button>
     <button class="btn" onclick={() => viewer.zoomTo('width')}>{t('fitWidth')}</button>
     <button class="btn" onclick={() => viewer.zoomTo('page')}>{t('fitPage')}</button>
     <button class="btn icon" onclick={() => viewer.zoomBy(1.25)} title={t('zoomIn')} aria-label={t('zoomIn')}>+</button>
+    {/if}
     <span class="find" class:open={findOpen}>
       <button class="btn icon" onclick={() => { findOpen = !findOpen; if (findOpen) setTimeout(() => findInput?.focus()); }} title={t('find')} aria-label={t('find')}>{@html icon('search')}</button>
       {#if findOpen}
@@ -233,14 +248,13 @@
   .ws { height: 100%; display: grid; grid-template-rows: auto auto 1fr; }
   .orgwrap { grid-row: 2 / 4; min-height: 0; position: relative; }
   .orgwrap.scoped { display: grid; grid-template-rows: auto 1fr; }
-  .scope { display: flex; gap: var(--s-8); padding: var(--s-8) var(--s-16); background: var(--surface); border-bottom: 1px solid var(--line); }
-  .scope button { min-height: var(--control); padding: 0 var(--s-16); border: 1px solid var(--line); border-radius: var(--r-8); background: var(--surface); font-weight: 600; color: var(--muted); }
-  .scope button.on { background: var(--green-soft); border-color: var(--green); color: var(--ink); }
+  .scopeband { display: flex; padding: var(--s-8) var(--s-16); background: var(--surface); border-bottom: 1px solid var(--line); }
   .applying { position: absolute; inset: 0; z-index: 2; margin: 0; display: grid; place-items: center; background: var(--veil); font-size: var(--fs-16); font-weight: 600; }
   .bar { display: flex; align-items: center; gap: var(--s-8); padding: var(--s-8) var(--s-16); background: var(--surface); border-bottom: 1px solid var(--line); min-width: 0; }
   :global(html[data-desktop]) .bar { padding-right: 156px; } /* room for the window buttons in the corner */
   .grow { flex: 1 1 0; min-width: 0; align-self: stretch; }
-  .mod { display: flex; flex: none; }
+  .mod { display: flex; flex: none; width: 10px; } /* its room is always kept, so the tabs never move */
+  .zoommenu { position: relative; display: flex; }
   .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--green); }
   .tasks { display: flex; flex: 0 0 auto; gap: var(--s-8); margin-inline-start: var(--s-8); }
   .morewrap { position: relative; display: flex; }
@@ -262,7 +276,7 @@
   .body.nothumbs { grid-template-columns: 1fr; }
   main { min-width: 0; min-height: 0; }
   @media (max-width: 720px) { .body { grid-template-columns: 1fr; } .body :global(.thumbs) { display: none; } }
-  @media (max-width: 600px) { .bar { gap: var(--s-8); padding-inline: var(--s-12); } .bar > img { flex: none; } .tools { flex-wrap: wrap; gap: var(--s-8); padding-inline: var(--s-12); } .find { margin-inline-start: 0; } .find input { width: 140px; } }
+  @media (max-width: 600px) { .bar { gap: var(--s-8); padding-inline: var(--s-12); } .bar > img { flex: none; } .bar :global(.wrap:has(> .name)) { flex: 0 1 auto; min-width: 0; } .tasks { flex: 0 1 auto; min-width: 0; } .tools { flex-wrap: wrap; gap: var(--s-8); padding-inline: var(--s-12); } .find { margin-inline-start: 0; } .find input { width: 140px; } }
   .tasks.phone { position: relative; margin-inline-start: 0; }
   .tasks.phone > .task { background: var(--green-soft); }
 </style>

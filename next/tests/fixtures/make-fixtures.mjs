@@ -109,3 +109,6 @@ fs.writeFileSync(here('photo.png'), pix.asPNG());
   const photo = { doc: m.Document.openDocument(png, 'image/png'), bytes: png };
   fs.writeFileSync(here('scan.pdf'), assemble(m, () => photo, { items: [{ doc: 1, page: 0, fit: { w: 595, h: 400 } }] }));
 }
+
+// mixed.pdf: pages of different sizes and orientations (A4 portrait, A4 landscape, small, wide) for the zoom tests
+fs.writeFileSync(here('mixed.pdf'), assemble(m, null, { items: [[595, 842], [842, 595], [300, 400], [1000, 400], [595, 842]].map(([w, h], i) => ({ divider: { w, h, label: 'Waraq test', title: 'Mixed ' + (i + 1) } })) }, () => fonts));

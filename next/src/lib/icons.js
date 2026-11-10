@@ -94,6 +94,16 @@ grayscale:'<circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="
   forward:'<path d="M12 19V6M7 11l5-5 5 5"/>',
   backward:'<path d="M12 5v13M7 13l5 5 5-5"/>',
   'to-back':'<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
+  pointer:'<path d="M6 3l12 8-5.5 1.5L16 19l-2 1-3.2-6.2L6 17z"/>',
+  highlight:'<path d="M9 16l3-9 3 9M10 13h4"/><path d="M4 20h16" stroke-width="3"/>',
+  underline:'<path d="M8 4v7a4 4 0 0 0 8 0V4M5 20h14"/>',
+  strike:'<path d="M5 12h14M16 7c-.6-1.2-2-2-4-2-2.2 0-4 1-4 3 0 1.5 1.5 2.2 4 3M12 12c2.3.5 4 1.2 4 3.5S14 19 12 19c-2 0-3.5-.8-4-2"/>',
+  pen:'<path d="M3 17c2-6 4-9 6-6s2 6 5 2 4-6 7-6"/>',
+  square:'<rect x="4" y="5" width="16" height="14" rx="2"/>',
+  circle:'<ellipse cx="12" cy="12" rx="9" ry="6.5"/>',
+  line:'<path d="M5 19L19 5"/>',
+  textbox:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M9 10h6M12 10v5"/>',
+  note:'<path d="M5 4h14v11l-5 5H5z"/><path d="M14 20v-5h5M8 9h8"/>',
   zoom:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21M7.5 10.5h6M10.5 7.5v6"/>'
 };
 const aliases = {pageEditor:'annotate',cadToPdf:'office',fixArabic:'ocr',sign:'signature',batch:'merge',optimize:'compress',

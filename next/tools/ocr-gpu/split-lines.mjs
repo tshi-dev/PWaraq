@@ -8,9 +8,10 @@ import { linesOf } from '../../src/lib/ocr.ts';
 const arg = (k, d) => { const i = process.argv.indexOf('--' + k); return i < 0 ? d : process.argv[i + 1]; };
 const root = path.join(import.meta.dirname, '..', '..'), work = path.resolve(root, arg('work', '../ocr-gpu-work')), dir = path.join(work, 'pool');
 const out = path.join(dir, 'lines.json'), have = fs.existsSync(out) ? JSON.parse(fs.readFileSync(out, 'utf8')) : [], seen = new Set(have.map((p) => p.page));
+const spread = (f) => f.replace(/^c-(\d+)-(\d+)/, 'c-$2-$1');   // Commons c-WORK-PAGE: page 1 of every work, then page 2, ...: a round samples all works (in name order one bad scan stalled the agreement for days)
 const T = createRequire(import.meta.url)('tesseract.js');
 // --max N: at most N new pages a run (the GPU rounds of run-forever.ps1 start soon); --workers K pages read at once (one Tesseract each)
-const todo = fs.readdirSync(path.join(dir, 'pages')).filter((f) => f.endsWith('.jpg') && !seen.has(f)).sort().slice(0, +arg('max', Infinity));
+const todo = fs.readdirSync(path.join(dir, 'pages')).filter((f) => f.endsWith('.jpg') && !seen.has(f)).sort((a, b) => (spread(a) < spread(b) ? -1 : 1)).slice(0, +arg('max', Infinity));
 const workers = await Promise.all(Array.from({ length: Math.min(+arg('workers', 8), todo.length) }, async () => {
   const w = await T.createWorker('ara', 1, { langPath: path.join(root, 'public', 'ocr'), gzip: true, cacheMethod: 'none' });
   await w.setParameters({ tessedit_pageseg_mode: '3', preserve_interword_spaces: '1' });

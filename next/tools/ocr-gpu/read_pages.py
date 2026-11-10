@@ -40,6 +40,12 @@ else:  # Qari-OCR 0.4.0: a LoRA on Qwen3-VL-4B-Instruct, the base loaded in 4 bi
     proc = AutoProcessor.from_pretrained(rid); proc.tokenizer.padding_side = 'left'
     prompt = 'Free OCR.'; extra = {}  # the model card's prompt
 
+DUTY = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(a.out))), 'gpu-duty.txt')
+def duty():
+    """WORK/gpu-duty.txt, e.g. 0.8: the GPU works 80 % of the time (a pause after each batch). Read every batch: edit it while a round runs."""
+    try: return min(1.0, max(0.1, float(open(DUTY).read())))
+    except (OSError, ValueError): return 1.0
+
 def read(imgs, max_new):
     """One batch of pictures -> one text each (greedy)."""
     texts = [proc.apply_chat_template([{'role': 'user', 'content': [{'type': 'image', 'image': i}, {'type': 'text', 'text': prompt}]}], tokenize=False, add_generation_prompt=True) for i in imgs]
@@ -62,11 +68,13 @@ if a.lines:
     t0 = time.time()
     with open(a.out, 'a', encoding='utf8') as o:
         for i in range(0, len(jobs), a.batch):
-            b = jobs[i:i + a.batch]
+            b = jobs[i:i + a.batch]; tb = time.time()
             try: txt = read([Image.open(j['file']).convert('RGB') for j in b], 120)
             except Exception as e: print('FAILED batch', i, repr(e)[:300], file=sys.stderr, flush=True); torch.cuda.empty_cache(); continue
             for j, t in zip(b, txt): o.write(json.dumps({'id': j['id'], 'text': t}, ensure_ascii=False) + chr(10))
             o.flush()
+            d = duty()
+            if d < 1: time.sleep((time.time() - tb) * (1 / d - 1))
             if (i // a.batch) % 20 == 0: print(i + len(b), 'of', len(jobs), 'lines', round(time.time() - t0), 's', flush=True)
     sys.exit()
 

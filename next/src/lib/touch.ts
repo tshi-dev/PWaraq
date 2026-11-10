@@ -46,3 +46,47 @@ export function pageZoom(node: HTMLElement, o: { get: () => number; set: (v: num
   const b = pinch(node, { start: () => (v0 = o.get()), change: (ratio, x, y) => to(v0 * ratio, x, y) });
   return { destroy() { a.destroy(); b.destroy(); } };
 }
+
+// Browser-style auto-scroll with the middle button. Press and release: scroll mode, the further the pointer is from the round marker
+// (up or down) the faster the view moves; any click or Esc ends it. Press, hold and drag: scrolls while held. The middle click's own
+// default (links, paste, the OS pan cursor) is cancelled. Vertical only, so right-to-left makes no difference.
+export function autoScroll(node: HTMLElement) {
+  let mark: HTMLElement | null = null, oy = 0, y = 0, raf = 0, last = 0, t0 = 0, held = false, moved = false;
+  const stop = () => {
+    cancelAnimationFrame(raf); raf = 0; mark?.remove(); mark = null; held = false;
+    node.style.cursor = ''; removeEventListener('pointermove', move, true); removeEventListener('pointerdown', click, true); removeEventListener('keydown', key, true);
+  };
+  // the click that ends scroll mode must not also act (place a signature box, jump to a page): swallow its `click`, and drop the trap if none comes
+  let trap: ((e: Event) => void) | null = null, trapTimer = 0;
+  const untrap = () => { if (trap) removeEventListener('click', trap, true); trap = null; clearTimeout(trapTimer); };
+  const eat = () => {
+    untrap();
+    trap = (e) => { e.preventDefault(); e.stopPropagation(); untrap(); };
+    addEventListener('click', trap, true); trapTimer = window.setTimeout(untrap, 600);
+  };
+  const tick = (now: number) => {
+    const d = y - oy, v = Math.abs(d) < 10 ? 0 : (d - Math.sign(d) * 10) * 0.12 * Math.min(2, (now - last) / 16.7); // px per frame, 60 fps
+    last = now; node.scrollTop += v; raf = requestAnimationFrame(tick);
+  };
+  const move = (e: PointerEvent) => { y = e.clientY; if (Math.abs(y - oy) > 6) moved = true; };
+  const click = (e: Event) => { if (!held) { e.preventDefault(); e.stopPropagation(); if ((e as PointerEvent).button === 0) eat(); stop(); } };
+  const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); stop(); } };
+  const down = (e: PointerEvent) => {
+    if (e.button !== 1) return;
+    if (!raf && (e.target as Element | null)?.closest?.('input, textarea, [contenteditable], a[href]')) return;
+    e.preventDefault(); e.stopPropagation();
+    if (raf) { stop(); return; }
+    oy = y = e.clientY; t0 = performance.now(); held = true; moved = false; last = t0;
+    mark = document.createElement('div'); mark.className = 'autoscroll-mark';
+    mark.style.cssText = `position:fixed;z-index:9999;left:${e.clientX - 14}px;top:${oy - 14}px;width:28px;height:28px;box-sizing:border-box;border:2px solid var(--green,#15775d);border-radius:50%;background:var(--mint,#eaf3eb);opacity:.92;pointer-events:none`;
+    mark.setAttribute('aria-hidden', 'true');
+    document.body.append(mark); node.style.cursor = 'all-scroll';
+    addEventListener('pointermove', move, true); addEventListener('pointerdown', click, true); addEventListener('keydown', key, true);
+    raf = requestAnimationFrame(tick);
+  };
+  const up = (e: PointerEvent) => { if (e.button === 1 && held) { held = false; if (moved || performance.now() - t0 > 350) stop(); } }; // a short press stays on; a drag ends on release
+  const swallow = (e: MouseEvent) => { if (e.button === 1) e.preventDefault(); }; // mousedown/auxclick: no link opening, paste or OS autoscroll
+  node.addEventListener('pointerdown', down); addEventListener('pointerup', up, true);
+  node.addEventListener('mousedown', swallow); node.addEventListener('auxclick', swallow);
+  return { destroy() { stop(); untrap(); node.removeEventListener('pointerdown', down); removeEventListener('pointerup', up, true); node.removeEventListener('mousedown', swallow); node.removeEventListener('auxclick', swallow); } };
+}

@@ -10,8 +10,8 @@
   import { newPortfolio, load, parse, PortfolioError, type Portfolio as PortfolioData } from './lib/portfolio';
   import { unzip } from './lib/zip';
   import { saveDraft, listDrafts, readDraft, dropDraft, EVERY, type Draft } from './lib/drafts';
-  import { startSession } from './lib/session';
-  import { uid } from './lib/pages';
+  import { startSession, endSession } from './lib/session';
+  import { uid, isImage, mimeOf } from './lib/pages';
   import Notice from './components/Notice.svelte';
   import IosHint from './components/IosHint.svelte';
   import CrashReport from './components/CrashReport.svelte';
@@ -20,7 +20,7 @@
   import type { Entry } from './lib/crashreport';
   import type { Health } from './lib/engine/pool';
   import { CONVERTIBLE_ACCEPT, isConvertible, toPdf } from './lib/convert';
-  import { isDesktop, onOpenPaths, readPath, writePath, saveAs, baseName } from './lib/desktop';
+  import { isDesktop, onOpenPaths, readPath, writePath, saveAs, baseName, appWindow } from './lib/desktop';
   import TitleBar from './components/TitleBar.svelte';
   import PackPrompt from './components/PackPrompt.svelte';
   import { update, version, started, check as checkUpdate, restart } from './lib/update.svelte';
@@ -30,7 +30,7 @@
   const previous = crash.previousRun(); // what the run before this one was doing, read before this run starts overwriting it
   crash.install();
   const pool = new EnginePool();
-  let doc = $state<{ name: string; sizes: { w: number; h: number }[]; bytes: Uint8Array; modified: boolean; password?: string; path?: string; task?: Key; extra?: File[] } | null>(null);
+  let doc = $state<{ name: string; sizes: { w: number; h: number }[]; bytes: Uint8Array; modified: boolean; password?: string; open?: string; path?: string; task?: Key; extra?: File[] } | null>(null);
   let openedPath: string | undefined; // desktop: the file on disk behind `doc`, so Save writes straight back
   let portfolio = $state<PortfolioData | null>(null);
   let busy = $state(false), error = $state(''), over = $state(false), recent = $state<Recent[]>([]), again = $state(false);
@@ -53,12 +53,15 @@
   // recovery: engine health, drafts of unsaved work, the last closed document
   let health = $state<Health | null>(null), notice = $state(''), drafts = $state<Draft[]>([]), closed = $state<{ name: string; bytes: Uint8Array; modified: boolean; path?: string } | null>(null);
   let restoredWork = $state(false); // the person chose Restore: only then "your work was restored" is true
-  let report = $state<Entry[]>([]), crashes = $state(0), copied = $state(false);
+  let report = $state<Entry[]>([]), lastReport = $state(false), crashes = $state(0), copied = $state(false), quietExit = $state(false);
   async function copyReport() { if (await crash.copyReport()) { copied = true; setTimeout(() => (copied = false), 3000); } }
   let draftId = uid(), kept: Uint8Array | null = null, closeTimer: ReturnType<typeof setTimeout>;
   pool.onHealth = (h) => {
+    if (h.kind === 'stopped') { crash.record('worker', 'engine stopped after repeated crashes'); notice = t('engineStopped'); health = null; return; } // stays: only a restart helps
     if (h.kind === 'recovered') { crash.record('worker', h.why, h.op); notice = t('recovered'); setTimeout(() => (notice = ''), 8000); health = null; } else health = h.kind === 'slow' ? h : null;
   };
+  // the pool's own refusals say what happened; anything else gets the caller's message
+  const why = (e: unknown, other: Key) => t(({ TOO_LARGE: 'tooLarge', ENGINE_STOPPED: 'engineStopped' } as Record<string, Key>)[(e as Error)?.message] ?? other);
   if (navigator.webdriver) (globalThis as { waraqPool?: EnginePool }).waraqPool = pool; // lets the tests crash the engine on purpose
   async function keepDraft() {
     const d = doc;
@@ -78,24 +81,35 @@
     refresh();
     startSession().then(async (unclean) => {
       if (unclean) { drafts = (await listDrafts()).slice(0, 1); await crash.record('unclean', 'The previous run ended without a clean exit', undefined, previous); }
-      const unseen = (await crash.entries()).filter((e) => !e.seen && (e.kind === 'panic' || e.kind === 'unclean'));
-      if (unseen.length && crash.askFirst()) report = unseen; else crash.markSeen(unseen);
+      // an unclean exit alone (a closed browser, a discarded tab, a power cut) is only noted on the start screen; with an
+      // error logged in that run, or a Rust panic, it is a crash and the dialog asks
+      const fresh = (await crash.entries()).filter((e) => !e.seen), exits = fresh.filter((e) => e.kind === 'unclean');
+      const errors = fresh.filter((e) => e.kind === 'error' || e.kind === 'rejection' || e.kind === 'worker');
+      const loud = [...fresh.filter((e) => e.kind === 'panic'), ...(exits.length && errors.length ? [...exits, ...errors] : [])]; // the exit first: its log shows the errors
+      if (loud.length && crash.askFirst()) report = loud; else crash.markSeen(loud);
+      crash.markSeen(fresh.filter((e) => !loud.includes(e))); // errors of runs that ended well are not brought up later
+      quietExit = exits.length > 0 && !loud.length;
       crashes = (await crash.entries()).length;
     });
     const every = setInterval(keepDraft, EVERY);
-    if (isDesktop) onOpenPaths(async ([p]) => openFile(await readPath(p), undefined, p));
+    try { // a failing desktop call must not stop the update check below
+      if (isDesktop) onOpenPaths(async ([p]) => openFile(await readPath(p), undefined, p));
+      if (isDesktop) appWindow().onCloseRequested(() => endSession()); // ✕, Alt+F4 or the task bar: a clean exit is written before the window goes
+    } catch { /* the app still works without them */ }
     started();
     return () => clearInterval(every);
   });
 
   class Damaged { pages: number; constructor(pages: number) { this.pages = pages; } }
-  async function show(bytes: Uint8Array, name: string, modified = false, password?: string, repairedOk = false) {
+  async function show(bytes: Uint8Array, name: string, modified = false, password?: string, repairedOk = false, open?: string) {
     await setDocument(bytes);
-    const sizes = await pool.open(bytes, password);
+    crash.note(`open: ${(bytes.length / 2 ** 20).toFixed(1)} MB`); // the next "unclean exit" entry shows what was being opened
+    const sizes = await pool.open(bytes, password, open);
+    crash.note(`opened: ${sizes.length} pages`);
     if (pool.repaired && !repairedOk) throw new Damaged(sizes.length); // asked first: "Open what could be read"
     if (!(doc?.name === name && modified)) { draftId = uid(); kept = null; } // a change to the open document keeps its draft; anything else starts a new one
     doc = null; portfolio = null; await tick(); // a new document gets a fresh workspace
-    doc = { name, sizes, bytes, modified, password, path: openedPath, task: want, extra }; want = undefined; extra = [];
+    doc = { name, sizes, bytes, modified, password, open, path: openedPath, task: want, extra }; want = undefined; extra = [];
     keepDraft();
   }
   // a damaged PDF MuPDF could still read: shown on the start screen until the person chooses
@@ -112,17 +126,36 @@
   }
   // a password-protected PDF: asked for on the start screen, then opened with it
   let locked = $state<{ bytes: Uint8Array; name: string; size: number; handle?: FileSystemFileHandle; path?: string } | null>(null), typed = $state('');
-  async function unlockOpen(e: SubmitEvent) {
-    e.preventDefault();
+  // typed the owner password of a file that also has an open password: the open password may be typed too (optional), so saved
+  // copies keep it; "Skip" opens anyway and asks when a save needs it (the owner password never becomes the open password)
+  let askOpen = $state(false), openTyped = $state(''), openField = $state<HTMLInputElement>();
+  const unlocked = () => { locked = null; typed = ''; askOpen = false; openTyped = ''; };
+  async function unlockOpen(e: SubmitEvent | null, skip = false) {
+    e?.preventDefault();
     if (!locked) return;
     busy = true; error = '';
     try {
-      const l = locked;
-      await show(l.bytes, l.name, false, typed);
-      locked = null; typed = '';
+      const l = locked, guard = (current: string) => pool.tool<{ owner: boolean; open: boolean } | null>('guard', { bytes: l.bytes.slice(), current });
+      if (!askOpen) {
+        const g = await guard(typed);
+        if (g?.owner && !g.open) { askOpen = true; busy = false; await tick(); openField?.focus(); return; }
+      } else if (!skip && !(await guard(openTyped))?.open) throw new Error('WRONG_OPEN');
+      await show(l.bytes, l.name, false, typed, false, askOpen && !skip ? openTyped : undefined);
+      unlocked();
       remember({ key: `pdf:${l.name}:${l.size}`, kind: 'pdf', name: l.name, pages: doc!.sizes.length, handle: l.handle, path: l.path, thumb: await cover() });
-    } catch { error = t('wrongPassword'); }
+    } catch (e) { error = why(e, 'wrongPassword'); }
     busy = false;
+  }
+
+  // a save that must seal the copy but only knows the owner password: the open password is asked here, checked, and used for this document
+  let needOpen = $state<((pw: string | null) => void) | null>(null), needTyped = $state(''), needBad = $state(false), needDialog = $state<HTMLDialogElement>();
+  pool.askOpen = () => new Promise((resolve) => { needTyped = ''; needBad = false; needOpen = (pw) => { needOpen = null; resolve(pw); }; });
+  $effect(() => { if (needOpen) needDialog?.showModal(); });
+  async function submitNeed(e: SubmitEvent) {
+    e.preventDefault();
+    const ok = await pool.tool<{ open: boolean } | null>('guard', { bytes: doc!.bytes.slice(), current: needTyped }).catch(() => null);
+    if (!ok?.open) { needBad = true; return; }
+    doc!.open = needTyped; needOpen?.(needTyped);
   }
 
   async function openFile(file?: File | null, handle?: FileSystemFileHandle, path?: string) {
@@ -148,7 +181,7 @@
         }
         remember({ key: `pdf:${file.name}:${file.size}`, kind: 'pdf', name: file.name, pages: doc!.sizes.length, handle, path, thumb: await cover() });
       }
-    } catch (e) { error = t(!/%PDF-/.test(new TextDecoder('latin1').decode(bytes0.subarray(0, 1024))) ? 'notPdf' : 'notReadable'); }
+    } catch (e) { error = why(e, !/%PDF-/.test(new TextDecoder('latin1').decode(bytes0.subarray(0, 1024))) ? 'notPdf' : 'notReadable'); }
     busy = false;
   }
   // first page, small, for the recent list
@@ -191,16 +224,38 @@
 
   async function pick(multiple = false) {
     picker.multiple = multiple;
-    const [first, ...rest] = await pickFiles({ multiple, accept: { 'application/pdf': ['.pdf'], 'application/zip': ['.waraq'], 'application/octet-stream': CONVERTIBLE_ACCEPT.split(',') }, fallback: () => picker.click() });
-    if (first) { extra = rest.map((r) => r.file); openFile(first.file, first.handle, first.path); }
+    const picked = await pickFiles({ multiple, accept: { 'application/pdf': ['.pdf'], 'image/*': ['.png', '.jpg', '.jpeg'], 'application/zip': ['.waraq'], 'application/octet-stream': CONVERTIBLE_ACCEPT.split(',') }, fallback: () => picker.click() });
+    openMany(picked);
   }
-  const plain = () => { want = undefined; return pick(); };
+  // Several files (or photos) chosen together are combined in Organize; photos first become one new, unsaved PDF.
+  function openMany(list: { file: File; handle?: FileSystemFileHandle; path?: string }[]) {
+    const [first, ...rest] = list;
+    if (!first) return;
+    if (isImage(first.file.name)) return openImages(list.map((l) => l.file));
+    extra = rest.map((r) => r.file);
+    if (rest.length) want ??= 'organize';
+    openFile(first.file, first.handle, first.path);
+  }
+  // the photos go to one engine only (not a copy in each); the document that was open stays until the new one is ready
+  async function openImages(files: File[]) {
+    busy = true; error = '';
+    try {
+      const pdf = await pool.tool<Uint8Array>('images', { files: await Promise.all(files.map(async (f) => ({ bytes: new Uint8Array(await f.arrayBuffer()), mime: mimeOf(f) }))) });
+      openedPath = undefined; want = 'organize'; extra = [];
+      await show(pdf, files[0].name.replace(/\.[^.]+$/, '') + '.pdf', true); // not in Recent until saved, like a new portfolio
+    } catch (e) {
+      want = undefined; error = why(e, 'notReadable');
+      if (doc) { openedPath = doc.path; await setDocument(doc.bytes); await pool.open(doc.bytes, doc.password).catch(() => {}); } // show() may have let it go
+    }
+    busy = false;
+  }
+  const plain = () => { want = undefined; return pick(true); };
   const tile = (task: Key | 'portfolio') => { if (task === 'portfolio') return startPortfolio(); want = task; return pick(task === 'organize'); };
   async function drop(e: DragEvent) {
     e.preventDefault(); over = false; want = undefined; extra = [];
-    const file = e.dataTransfer?.files[0], item = e.dataTransfer?.items[0];
+    const files = [...(e.dataTransfer?.files ?? [])], item = e.dataTransfer?.items[0];
     const handle = await (item as any)?.getAsFileSystemHandle?.().catch(() => null);
-    openFile(file, handle?.kind === 'file' ? handle : undefined);
+    openMany(files.map((file, i) => ({ file, handle: i === 0 && handle?.kind === 'file' ? handle : undefined })));
   }
   async function close() {
     if (doc) { // kept for 10 minutes: "Undo close" on the start screen
@@ -237,15 +292,27 @@
 </script>
 
 {#if report.length && !drafts.length}
-  <CrashReport entry={report[0]} restored={restoredWork} onclose={() => { crash.markSeen(report); report = []; }} />
+  <CrashReport entry={report[0]} restored={restoredWork} last={lastReport} onclose={() => { crash.markSeen(report); report = []; lastReport = false; }} />
+{/if}
+{#if needOpen}
+  <dialog bind:this={needDialog} class="needopen" aria-labelledby="need-h" oncancel={(e) => { e.preventDefault(); needOpen?.(null); }}>
+    <form onsubmit={submitNeed}>
+      <h2 id="need-h">{t('needOpenTitle')}</h2>
+      <p class="muted">{t('needOpenHelp')}</p>
+      <label for="needpw">{t('openPwLabel')}</label>
+      <input id="needpw" type="password" bind:value={needTyped} autocomplete="off" />
+      {#if needBad}<p class="error" role="alert">{t('wrongPassword')}</p>{/if}
+      <span class="row"><button class="btn primary" disabled={!needTyped}>{t('save')}</button><button type="button" class="btn" onclick={() => needOpen?.(null)}>{t('cancel')}</button></span>
+    </form>
+  </dialog>
 {/if}
 <Notice message={notice} slow={health?.kind === 'slow'} oncancel={() => pool.cancelAll()} />
 {#if isDesktop}<TitleBar flush={!!(doc || portfolio)} float={!!(doc || portfolio)} /><PackPrompt />{/if}
-<input bind:this={picker} type="file" accept="application/pdf,.pdf,.waraq,{CONVERTIBLE_ACCEPT}" hidden onchange={(e) => { const [f, ...rest] = Array.from(e.currentTarget.files ?? []); extra = rest; openFile(f); e.currentTarget.value = ''; }} />
+<input bind:this={picker} type="file" accept="application/pdf,.pdf,.waraq,.png,.jpg,.jpeg,{CONVERTIBLE_ACCEPT}" hidden onchange={(e) => { openMany(Array.from(e.currentTarget.files ?? []).map((file) => ({ file }))); e.currentTarget.value = ''; }} />
 
 {#if doc}
   <Workspace {pool} sizes={doc.sizes} name={doc.name} bytes={doc.bytes} modified={doc.modified} password={doc.password} task={doc.task} extra={doc.extra} onOpen={plain} onClose={close} onSave={() => save()} onSaveAs={() => save(true)}
-    onReplace={(bytes, pw) => show(bytes, doc!.name, true, pw)} />
+    onReplace={(bytes, pw, next) => { if (next) want = next; return show(bytes, doc!.name, true, pw, false, doc!.open); }} />
 {:else if portfolio}
   <Portfolio {pool} {portfolio} onClose={close} />
 {:else}
@@ -259,7 +326,7 @@
     </div>
     <section class="open" aria-labelledby="open-h">
       <h2 id="open-h">{t('startOpenTitle')}</h2>
-      <p class="muted">{t('dropHere')}</p>
+      <p class="muted drop">{t('dropHere')}</p>
       <div class="actions">
         <button class="btn primary big" onclick={plain} disabled={busy}>{@html icon('upload')}{busy ? t('reading') : t('open')}</button>
       </div>
@@ -268,7 +335,12 @@
           <label for="pdfpw">{@html icon('protect')}{t('needsPassword')} <strong>{locked.name}</strong></label>
           <span><input id="pdfpw" type="password" bind:value={typed} autocomplete="off" />
           <button class="btn primary" disabled={busy || !typed}>{t('openShort')}</button>
-          <button type="button" class="btn" onclick={() => { locked = null; typed = ''; error = ''; }}>{t('cancel')}</button></span>
+          <button type="button" class="btn" onclick={() => { unlocked(); error = ''; }}>{t('cancel')}</button></span>
+          {#if askOpen}
+            <label for="pdfopen" class="muted">{t('openPwAsk')}</label>
+            <input id="pdfopen" type="password" bind:value={openTyped} bind:this={openField} autocomplete="off" />
+          <button type="button" class="btn" disabled={busy} onclick={() => unlockOpen(null, true)}>{t('skipOpenPw')}</button>
+          {/if}
         </form>
       {/if}
       {#if damaged}
@@ -333,6 +405,8 @@
       </div>
     {/if}
     <p class="crashrow">
+      {#if quietExit && !drafts.length}<span class="muted small" role="status">{t('closedQuietly')}</span>{/if}
+      {#if crashes}<button class="btn primary" onclick={async () => { report = (await crash.entries()).slice(0, 1); lastReport = true; }}>{t('sendLastReport')}</button>{/if}
       <button class="btn" onclick={reportProblem}>{t('reportProblem')}</button>
       {#if crashes}
         <button class="btn" onclick={copyReport}>{copied ? t('crashCopied') : t('copyCrash')}</button>
@@ -380,6 +454,14 @@
   .lock label { display: inline-flex; align-items: center; gap: var(--s-8); }
   .lock span { display: flex; gap: var(--s-8); }
   .lock input { min-height: var(--control); padding: 0 var(--s-12); border: 1px solid var(--line); border-radius: var(--r-8); background: var(--paper); }
+  .needopen { width: min(420px, calc(100% - 2 * var(--s-16))); padding: var(--s-24); border: 1px solid var(--line); border-radius: var(--r-16); background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+  .needopen::backdrop { background: var(--veil); }
+  .needopen form { display: grid; gap: var(--s-8); }
+  .needopen h2 { margin: 0; font-size: var(--fs-20); }
+  .needopen p { margin: 0; }
+  .needopen input { min-height: var(--control); padding: 0 var(--s-12); border: 1px solid var(--line); border-radius: var(--r-8); background: var(--paper); }
+  .needopen .row { display: flex; gap: var(--s-8); }
+  @media (pointer: coarse) { .drop { display: none; } }
   .crashrow { display: flex; gap: var(--s-8); margin: 0; align-items: center; flex-wrap: wrap; }
   .updaterow { display: grid; gap: var(--s-8); justify-items: center; }
   .banner { display: grid; gap: var(--s-8); justify-items: center; padding: var(--s-16); border: 1px solid var(--green); border-radius: var(--r-12); background: var(--green-soft); text-align: center; max-width: 520px; }

@@ -74,7 +74,7 @@ test('comment: shapes, arrow and text box; move and recolour a shape; Arabic scr
   await drag('Ellipse', [250, 300], [400, 380]);
   await drag('Line', [60, 450], [200, 500]);
   await drag('Arrow', [250, 450], [400, 500]);
-  await drag('Text box', [60, 560], [300, 620]);
+  await drag('Text box', [420, 300], [560, 340]); // high up: the tool strip leaves less of the page in view
   await expect(page.locator('.state')).toHaveText('5 comments');
 
   // select the rectangle, make it blue and move it
@@ -105,17 +105,17 @@ test('comment: the text typed into a new sticky note is part of making it — on
   await page.mouse.click(box.x + 400 * k, box.y + 200 * k);
   await text.fill('first words');
   await text.blur();
-  await expect(page.locator('.state')).toHaveText('1 comments');
+  await expect(page.locator('.state')).toHaveText('1 comment');
   await undo.click(); // one click: the note is gone, not just its text
-  await expect(page.locator('.state')).not.toHaveText('1 comments');
+  await expect(page.locator('.state')).toHaveText('0 comments');
   await expect(undo).toBeDisabled();
   await page.getByRole('button', { name: 'Redo (Ctrl Y)' }).click();
-  await expect(page.locator('.state')).toHaveText('1 comments');
+  await expect(page.locator('.state')).toHaveText('1 comment');
   // changing the text of the existing note later is a separate step
   await page.mouse.click(box.x + 410 * k, box.y + 210 * k);
   await text.fill('changed later');
   await text.blur();
   await undo.click();
-  await expect(page.locator('.state')).toHaveText('1 comments');
+  await expect(page.locator('.state')).toHaveText('1 comment');
   await expect(text).toHaveValue('first words');
 });

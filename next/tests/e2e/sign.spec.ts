@@ -5,6 +5,7 @@ import { open, choose, fixture } from './helpers';
 import { pageObjects } from '../../src/lib/engine/editpage';
 
 async function drawSignature(page: Page) {
+  await page.locator('.pad').evaluate((el) => el.scrollIntoView({ block: 'center' })); // the panel has a header now: the pad can start below the fold
   const b = (await page.locator('.pad').boundingBox())!;
   await page.mouse.move(b.x + 20, b.y + 60); await page.mouse.down();
   for (let i = 1; i <= 20; i++) await page.mouse.move(b.x + 20 + i * 10, b.y + 50 + 25 * Math.sin(i / 2));

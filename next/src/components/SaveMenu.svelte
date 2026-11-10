@@ -1,13 +1,13 @@
 <script lang="ts">
   // Save ▾ : Save, Save as…, Save a smaller copy (compress: Recommended / Smallest, in a small dialog).
   import type { EnginePool } from '../lib/engine/pool';
-  import { i18n, t } from '../lib/i18n.svelte';
+  import { t } from '../lib/i18n.svelte';
+  import { mb } from '../lib/size';
   import { icon } from '../lib/icons.js';
   import { saveFile } from '../lib/store';
   let { pool, bytes, name, password, compact = false, disabled, primary, saveOff, canShrink, onSave, onSaveAs }: { pool: EnginePool; compact?: boolean; bytes: Uint8Array; name: string; password?: string; disabled: boolean; primary: boolean; saveOff: boolean; canShrink: boolean;
     onSave: () => void; onSaveAs: () => void } = $props();
   let open = $state(false), dialog = $state(false), level = $state<'recommended' | 'small'>('recommended'), busy = $state(false), note = $state('');
-  const mb = (n: number) => (n / 1048576).toLocaleString(i18n.lang, { maximumFractionDigits: 1 }) + ' MB';
   async function shrink() {
     busy = true; note = '';
     try {

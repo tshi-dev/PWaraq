@@ -46,9 +46,10 @@ $ocrDir = ToWslPath "$root\public\ocr"; $gtW = ToWslPath "$Work\gt02p"; $trainSh
 $report = @("# OCR GPU pipeline summary ($(Get-Date -Format 'yyyy-MM-dd HH:mm'))", '', "silver lines: $n (teachers Qari v0.3 + Qari 4B, CER <= 2 %, unvowelled)", '')
 foreach ($v in $Variants) {
   $name, $it, $lr, $mix = $v.Split(':'); $model = "ara_${name}p"; $extra = @()
-  if ($mix -eq 'modern') {   # + modern-font lines rendered from the silver texts, 30 % of the mix (synth.py modern)
-    $synth = "$Work\synth-modern-$n"; New-Item -ItemType Directory -Force $synth | Out-Null
-    if (-not (Test-Path "$synth\done")) { Run wsl.exe @('-e', 'python3', (ToWslPath "$root\tools\ocr-gpu\synth.py"), $gtW, (ToWslPath $synth), [math]::Ceiling($n * 3 / 7), 'modern'); New-Item "$synth\done" -ItemType File | Out-Null }
+  if ($mix -like 'modern*') {   # + modern-font lines rendered from the silver texts (synth.py modern): 'modern' = 30 % of the mix, 'modern50' = 50 %
+    $pct = if ($mix -eq 'modern') { 30 } else { [int]$mix.Substring(6) }
+    $synth = "$Work\synth-$mix-$n"; New-Item -ItemType Directory -Force $synth | Out-Null
+    if (-not (Test-Path "$synth\done")) { Run wsl.exe @('-e', 'python3', (ToWslPath "$root\tools\ocr-gpu\synth.py"), $gtW, (ToWslPath $synth), [math]::Ceiling($n * $pct / (100 - $pct)), 'modern'); New-Item "$synth\done" -ItemType File | Out-Null }
     $extra = @(ToWslPath $synth)
   }
   if (-not (Test-Path "$Work\models\$model.traineddata.gz")) {

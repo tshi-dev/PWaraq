@@ -68,6 +68,12 @@ export function fit(text: string, max: number): string {
 export const mailtoUrl = (text: string) => `mailto:${SUPPORT}?subject=${encodeURIComponent('Waraq crash report')}&body=${encodeURIComponent(fit(text, 1800))}`;
 export const githubUrl = (text: string) => `${ISSUES}&title=${encodeURIComponent('Crash report')}&body=${encodeURIComponent(fit(text, 6000))}`;
 
+export const FORM = 'https://docs.google.com/forms/d/e/1FAIpQLSeM3yAuBGEfafVAs0b6-_tx3KkiRYCC965dzcSObC5x574OCQ/formResponse';
+/** The form fields of one report: the cleaned text (cut to ~8000 characters) and the version. */
+export const formBody = (text: string, version: string) => new URLSearchParams({ 'entry.2023254085': fit(text, 8000), 'entry.2138058848': version });
+/** Posts the report in the background (no-cors: the answer cannot be read, so "resolved" means it left). Opens nothing. */
+export const sendReport = (text: string, version: string) => fetch(FORM, { method: 'POST', mode: 'no-cors', body: formBody(text, version) });
+
 /** An entry read from the log file; the desktop program writes panic entries with fewer fields. */
 export function normalise(raw: any): Entry {
   return { id: String(raw.id ?? raw.at), at: Number(raw.at) || 0, kind: raw.kind ?? 'error', version: String(raw.version ?? 'unknown'), system: String(raw.system ?? 'unknown'),

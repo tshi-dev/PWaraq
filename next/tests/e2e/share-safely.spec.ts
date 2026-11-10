@@ -1,0 +1,113 @@
+import { test, expect, type Page } from '@playwright/test';
+import fs from 'node:fs';
+import path from 'node:path';
+import * as m from '../../engine/mupdf-wasm/dist/mupdf.js';
+import { pageWriter } from '../../src/lib/engine/textpage';
+import { open, saved } from './helpers';
+
+const audit = fs.readFileSync(path.join(import.meta.dirname, '..', '..', 'tools', 'ui-audit.js'), 'utf8');
+const font = (f: string) => new m.Font(f, fs.readFileSync(path.join(import.meta.dirname, '..', '..', 'public', 'fonts', f + '.ttf')));
+
+// text with a black box drawn over it (the text is still in the file), an author, and one comment
+function risky(file: string) {
+  const doc = new m.PDFDocument(), w = pageWriter(m, doc, { regular: font('Tajawal-Regular'), bold: font('Tajawal-Bold') });
+  doc.insertPage(-1, w.add({ w: 595, h: 842, lines: [{ text: 'Account 987654321 is secret', x: 72, y: 100, size: 14 }, { text: 'Nothing to hide here', x: 72, y: 300, size: 14 }] }));
+  w.finish();
+  const page = doc.findPage(0), box = doc.addStream('q 0 0 0 rg 60 715 260 40 re f Q', {}), c = page.get('Contents');
+  if (c.isArray()) c.push(box); else { page.put('Contents', doc.newArray()); page.get('Contents').push(c); page.get('Contents').push(box); }
+  const pg = doc.loadPage(0);
+  pg.createAnnotation('Text').setContents('ask Sami about this');
+  pg.destroy();
+  doc.setMetaData('info:Author', 'Sami Writer');
+  fs.writeFileSync(file, doc.saveToBuffer('').asUint8Array());
+  return file;
+}
+const clean = async (page: Page, where: string) => expect(((await page.evaluate(audit)) as { sample: unknown[] }).sample, where).toEqual([]);
+
+test('share safely: the check finds a fake redaction, the author and a comment; each fix removes its finding', async ({ page }, info) => {
+  test.setTimeout(150_000);
+  await open(page, risky(info.outputPath('risky.pdf')));
+  await page.getByRole('button', { name: 'Protect' }).click();
+  await page.getByRole('button', { name: 'Check this file' }).click();
+  const list = page.locator('.finds');
+  await expect(page.locator('.sum')).toHaveText('3 things found');
+  await expect(list).toContainText('Black boxes with the text still under them: 1');
+  await expect(list).toContainText('Author');
+  await expect(list).toContainText('Sami Writer');
+  await expect(list).toContainText('Comments and annotations: 1');
+  await expect(page.locator('.pf').getByRole('button', { name: 'Fix all' })).toBeVisible(); // the only primary in the pinned footer
+  await clean(page, 'findings');
+  await page.screenshot({ path: info.outputPath('findings-en.png') });
+
+  await page.getByRole('button', { name: 'Go to page 1' }).first().click(); // the page link opens the view on that page, and the report is still there on return
+  await expect(page.locator('#pageno')).toHaveValue('1');
+  await page.getByRole('button', { name: 'Protect' }).click();
+  await expect(page.locator('.sum')).toHaveText('3 things found');
+
+  await page.getByRole('button', { name: 'Redact for real' }).click(); // the document is replaced, then checked again
+  await expect(page.locator('.state')).toHaveText('Done. The file was checked again.', { timeout: 30_000 });
+  await expect(list).not.toContainText('Black boxes');
+  await expect(page.locator('.finds .done')).toHaveCount(1);
+  await expect(page.locator('.sum')).toHaveText('2 things found');
+  await page.getByRole('button', { name: 'Fix all' }).click(); // details, then comments, one after the other
+  await expect(page.locator('.clean')).toContainText('Nothing found — safe to share', { timeout: 60_000 });
+  await expect(page.locator('.finds .done')).toHaveCount(3);
+  await expect(list).not.toContainText('Sami Writer');
+  await clean(page, 'all fixed');
+  await page.screenshot({ path: info.outputPath('fixed-en.png') });
+
+  const file = await saved(page, () => page.getByRole('button', { name: 'Save', exact: true }).first().click());
+  const d = m.Document.openDocument(file.bytes, 'application/pdf');
+  expect(d.loadPage(0).toStructuredText().asText()).not.toContain('987654321');
+  expect(d.loadPage(0).toStructuredText().asText()).toContain('Nothing to hide');
+  expect(d.getMetaData('info:Author') ?? '').toBe('');
+  expect(d.asPDF()!.loadPage(0).getAnnotations().length).toBe(0);
+});
+
+test('share safely: Arabic, the findings list follows the design rules', async ({ page }, info) => {
+  test.setTimeout(150_000);
+  await page.addInitScript(() => localStorage.setItem('waraq-lang', 'ar'));
+  await open(page, risky(info.outputPath('risky-ar.pdf')));
+  await page.locator('.task').nth(5).click();
+  await page.locator('.side .pf .btn.primary').click();
+  await expect(page.locator('.finds > li')).toHaveCount(3, { timeout: 30_000 });
+  await clean(page, 'findings (ar)');
+  await page.screenshot({ path: info.outputPath('findings-ar.png') });
+});
+
+test('share safely: a file opened with only its open password keeps that password after a fix', async ({ page }, info) => {
+  test.setTimeout(150_000);
+  const plain = fs.readFileSync(risky(info.outputPath('risky-pw.pdf')));
+  const locked = info.outputPath('risky-locked.pdf');
+  fs.writeFileSync(locked, m.Document.openDocument(plain, 'application/pdf').asPDF()!.saveToBuffer('encrypt=aes-256,user-password=pw,owner-password=own,permissions=-1,garbage').asUint8Array()); // no limits, so it may be changed
+  await page.goto('/');
+  await page.locator('input[type=file]').first().setInputFiles(locked);
+  await page.locator('#pdfpw').fill('pw'); // the open password, not the owner's
+  await page.locator('.lock').getByRole('button', { name: 'Open' }).click();
+  await expect(page.locator('.page').first()).toBeVisible({ timeout: 60_000 });
+  await page.getByRole('button', { name: 'Protect' }).click();
+  await page.getByRole('button', { name: 'Check this file' }).click();
+  await page.getByRole('button', { name: 'Remove comments' }).click();
+  await expect(page.locator('.state')).toHaveText('Done. The file was checked again.', { timeout: 30_000 });
+  const file = await saved(page, () => page.getByRole('button', { name: 'Save', exact: true }).first().click());
+  const d = m.Document.openDocument(file.bytes, 'application/pdf');
+  expect(d.needsPassword()).toBe(true);
+  expect(d.authenticatePassword('pw')).toBeGreaterThan(0);
+  expect(d.asPDF()!.loadPage(0).getAnnotations().length).toBe(0);
+});
+
+test('share safely: a file with limits opened without its owner password is checked but offers no fixes', async ({ page }, info) => {
+  test.setTimeout(150_000);
+  const plain = fs.readFileSync(risky(info.outputPath('risky-lim.pdf')));
+  const limited = info.outputPath('risky-limited.pdf');
+  fs.writeFileSync(limited, m.Document.openDocument(plain, 'application/pdf').asPDF()!.saveToBuffer('encrypt=aes-256,owner-password=own,permissions=' + ((1 << 2) | ~0xfff) + ',garbage').asUint8Array()); // print only, no open password
+  await open(page, limited);
+  await page.getByRole('button', { name: 'Protect' }).click();
+  await page.getByRole('button', { name: 'Check this file' }).click();
+  await expect(page.locator('.sum')).toHaveText('3 things found', { timeout: 30_000 });
+  await expect(page.getByText('This file has limits and you do not have its owner password')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Fix all' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Remove comments' })).toHaveCount(0);
+  await expect(page.locator('.pf').getByRole('button', { name: 'Check again' })).toBeVisible();
+  await clean(page, 'limited');
+});

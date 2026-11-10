@@ -101,10 +101,26 @@ test('protection follows copies: compress keeps it; stripping it needs the owner
   assert.ok(!open(free).needsPassword());
   assert.equal(guardOf(m, free), null);
   assert.equal(guardOf(m, locked, 'own').owner, true);
-  // opened with the owner password a copy keeps the limits too, and the owner password stays the owner's
-  const copy = sealLikeSource(m, assemble(m, () => ({ doc: open(three), bytes: three }), { items: [{ doc: 1, page: 0 }] }), locked, 'own');
+  // opened with the owner password a copy keeps the limits too, the owner password stays the owner's and the open password
+  // stays the open password (the file cannot tell it: it is asked for, and without it no copy is made)
+  const page1 = assemble(m, () => ({ doc: open(three), bytes: three }), { items: [{ doc: 1, page: 0 }] });
+  assert.equal(guardOf(m, locked, 'own').open, null);
+  assert.equal(guardOf(m, locked, 'pw').open, 'pw');
+  assert.throws(() => sealLikeSource(m, page1, locked, 'own'), /NEED_OPEN_PASSWORD/);
+  assert.throws(() => compress(m, locked, 'small', 'own'), /NEED_OPEN_PASSWORD/);
+  const copy = sealLikeSource(m, page1, locked, 'own', 'pw');
   assert.equal(open(copy).hasPermission('copy'), false);
-  assert.ok(open(copy).authenticatePassword('own') & 4);
+  assert.equal(open(copy).authenticatePassword('own'), 4); // owner only: not the open password
+  assert.equal(open(copy).authenticatePassword('pw'), 2);
+  sameLimits(compress(m, locked, 'small', 'own', 'pw'));
+});
+
+test('limits without an open password: a copy made with the owner password still opens without one', () => {
+  const limits = open(three).asPDF().saveToBuffer('encrypt=aes-256,user-password=,owner-password=own,permissions=' + ((1 << 2) | ~0xfff) + ',garbage').asUint8Array().slice();
+  assert.equal(guardOf(m, limits, 'own').open, '');
+  const copy = open(sealLikeSource(m, assemble(m, () => ({ doc: open(three), bytes: three }), { items: [{ doc: 1, page: 0 }] }), limits, 'own'));
+  assert.equal(copy.needsPassword(), false);
+  assert.equal(copy.hasPermission('copy'), false);
 });
 
 test('protection follows Save after Organize/Comment: decrypt for the work, sealLikeSource puts it back with the owner password', () => {
@@ -112,11 +128,12 @@ test('protection follows Save after Organize/Comment: decrypt for the work, seal
   assert.ok(!open(plain).needsPassword());
   assert.equal(open(plain).countPages(), 3);
   assert.throws(() => decrypt(m, locked, 'wrong'), /WRONG_PASSWORD/);
-  const back = sealLikeSource(m, assemble(m, () => ({ doc: open(plain), bytes: plain }), { items: [{ doc: 1, page: 0 }, { doc: 1, page: 2 }] }), locked, 'own');
+  const back = sealLikeSource(m, assemble(m, () => ({ doc: open(plain), bytes: plain }), { items: [{ doc: 1, page: 0 }, { doc: 1, page: 2 }] }), locked, 'own', 'pw');
   const d = open(back);
   assert.equal(d.countPages(), 2);
   assert.equal(d.hasPermission('copy'), false);
-  assert.ok(open(back).authenticatePassword('own') & 4); // the typed owner password stays the owner's (and, as for every copy, opens the file)
+  assert.equal(open(back).authenticatePassword('own'), 4); // the typed owner password stays the owner's
+  assert.equal(open(back).authenticatePassword('pw'), 2); // and the open password is still the one people were given
 });
 
 // ---- page numbers in Arabic-Indic digits, sized by the page, readable on a dark page; a tiled watermark

@@ -6,10 +6,10 @@
   import { t } from '../lib/i18n.svelte';
   import { icon } from '../lib/icons.js';
   import { lazyPage } from '../lib/lazy';
-  import { pageZoom } from '../lib/touch';
+  import { pageZoom, autoScroll } from '../lib/touch';
 
   let { pool, sizes, bytes, onReplace }: { pool: EnginePool; sizes: { w: number; h: number }[]; bytes: Uint8Array; onReplace: (bytes: Uint8Array) => Promise<void> } = $props();
-  const W0 = 560; let W = $state(W0); const k = (i: number) => W / sizes[i].w;
+  const W0 = 560; let W = $state(W0); const widest = $derived(Math.max(...sizes.map((s) => s.w))), k = (_: number) => W / widest /* one scale for every page: W is the widest page's width */;
   let fields = $state<Field[]>([]), values = $state<Record<string, string | boolean>>({}), loaded = $state(false), flatten = $state(false);
   let busy = $state(false), error = $state('');
 
@@ -51,9 +51,9 @@
 </script>
 
 <div class="forms">
-  <section class="pages" aria-label={t('pages')} use:pageZoom={{ get: () => W, set: (v) => (W = v), min: W0 / 2, max: W0 * 3 }}>
+  <section class="pages" aria-label={t('pages')} use:autoScroll use:pageZoom={{ get: () => W, set: (v) => (W = v), min: W0 / 2, max: W0 * 3 }}>
     {#each sizes as s, i}
-      <div class="sheet" style="width:{W}px;height:{s.h * k(i)}px">
+      <div class="sheet" style="width:{s.w * k(i)}px;height:{s.h * k(i)}px">
         <canvas use:lazy={[i, W]}></canvas>
         {#each fields as f}
           {#if f.page === i}<button class="box" style="left:{f.rect[0] * k(i)}px;top:{f.rect[1] * k(i)}px;width:{f.rect[2] * k(i)}px;height:{f.rect[3] * k(i)}px" tabindex="-1" aria-label={f.label}
@@ -64,11 +64,8 @@
   </section>
 
   <aside class="side">
-    <h2>{t('forms')}</h2>
-    {#if loaded && !fields.length}
-      <p class="help">{t('noFields')}</p>
-    {:else}
-      <p class="help">{t('formsHelp')}</p>
+    <div class="ph"><h2>{t('forms')}</h2><p>{loaded && !fields.length ? t('noFields') : t('formsHelp')}</p></div>
+    {#if !loaded || fields.length}
       {#each rows as r}
         {@const f = r.fields[0]}
         {#if f.type === 'text'}
@@ -89,23 +86,22 @@
         {/if}
       {/each}
     {/if}
-    <span class="grow"></span>
     <label class="switch"><input type="checkbox" bind:checked={flatten} />{t('flatten')}</label>
-    <button class="btn primary" onclick={apply} disabled={busy || !fields.length}>{@html icon('check')}{t('formsApply')}</button>
-    <p class="state" aria-live="polite">{busy ? t('applying') : ''}</p>
-    {#if error}<p class="error" role="alert">{error}</p>{/if}
+    <div class="pf">
+      <button class="btn primary" onclick={apply} disabled={busy || !fields.length}>{@html icon('check')}{t('formsApply')}</button>
+      <p class="state" aria-live="polite">{busy ? t('applying') : ''}</p>
+      {#if error}<p class="error" role="alert">{error}</p>{/if}
+    </div>
   </aside>
 </div>
 
 <style>
-  .forms { height: 100%; display: grid; grid-template-columns: 1fr 340px; min-height: 0; }
+  .forms { height: 100%; display: grid; grid-template-columns: 1fr var(--panel); min-height: 0; }
   .pages { display: flex; flex-direction: column; align-items: safe center; gap: var(--s-16); background: var(--canvas); padding: var(--s-24); overflow: auto; }
   .sheet { position: relative; flex: none; background: #fff; box-shadow: var(--shadow); }
   .sheet canvas { width: 100%; height: 100%; display: block; }
   .box { position: absolute; padding: 0; border: 2px solid var(--green); border-radius: 2px; background: rgba(21, 119, 93, .12); cursor: pointer; }
-  .side { display: flex; flex-direction: column; gap: var(--s-12); padding: var(--s-16); background: var(--surface); border-inline-start: 1px solid var(--line); overflow-y: auto; }
-  h2 { margin: var(--s-8) 0 0; font-size: var(--fs-18); }
-  .help, .state { margin: 0; color: var(--muted); }
+  .state { margin: 0; color: var(--muted); }
   .state { font-size: var(--fs-12); min-height: 18px; }
   .field { display: grid; gap: var(--s-8); font-weight: 600; }
   .field input, .field select, .field textarea { min-height: var(--control); padding: 0 var(--s-12); border: 1px solid var(--line); border-radius: var(--r-8); background: var(--paper); font: inherit; font-weight: 400; }
@@ -114,7 +110,7 @@
   legend { padding: 0; font-weight: 600; }
   .switch, .choice { display: flex; align-items: center; gap: var(--s-8); min-height: var(--control); font-weight: 600; }
   .switch input, .choice input { flex: none; width: 20px; height: 20px; accent-color: var(--green); }
-  .grow { flex: 1; }
+  .field :disabled { background: var(--canvas); color: var(--muted); cursor: default; } /* read-only fields look read-only */
   .error { margin: 0; color: var(--danger); }
   @media (max-width: 900px) { .forms { grid-template-columns: 1fr; grid-template-rows: 1fr auto; } .side { border-inline-start: 0; border-top: 1px solid var(--line); } }
 </style>
