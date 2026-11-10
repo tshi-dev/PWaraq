@@ -20,6 +20,7 @@
   import Sheet from './Sheet.svelte';
   import ScopeTabs from './ScopeTabs.svelte';
   import { view } from '../lib/device.svelte';
+  import { restack, type To } from '../lib/selection';
 
   let { pool, base, label, onSave, onCancel, scope = $bindable() }: { pool: EnginePool; base: Item; label: string; onSave: (r: Saved) => void | Promise<void>; onCancel: () => void; scope?: 'page' | 'document' } = $props();
 
@@ -29,8 +30,13 @@
   const made = { move: 0, redact: 0, photo: 0 };
   let hidden = $state<Record<string, boolean>>({}), sheetOpen = $state(false);
   let doc = $state(-1), size = $state({ w: 595, h: 842 }), found = $state<{ lines: PageLine[]; images: Box[] }>({ lines: [], images: [] });
-  let objs = $state<Obj[]>([]), selected = $state<string | null>(null), tool = $state<'select' | 'text' | 'redact' | 'move'>('select'), busy = $state(t('openingPage'));
-  const sel = $derived(objs.find((o) => o.id === selected));
+  // the selection (`chosen`): editor objects by id, the page's own lines and pictures not lifted yet as 'line:3' / 'pic:2';
+  // `selected` / `sel`: the one object when exactly one is chosen (its own options, handles and font check)
+  let objs = $state<Obj[]>([]), chosen = $state<string[]>([]), tool = $state<'select' | 'text' | 'redact' | 'move'>('select'), busy = $state(t('openingPage'));
+  const selected = $derived(chosen.length === 1 ? chosen[0] : null), sel = $derived(objs.find((o) => o.id === selected));
+  const isOn = (k: string) => chosen.includes(k);
+  let several = $state(false); // touch: "Select several" makes taps add to the selection and a finger drag draw a selection box
+  const additive = (e: MouseEvent) => e.ctrlKey || e.metaKey || e.shiftKey || several;
   let sheet = $state<HTMLElement>();
   // photos in the order they are offered to the pointer: the biggest first, so the smallest one under it ends up on top and wins
   const byArea = $derived(found.images.map((_, i) => i).sort((a, b) => found.images[b].w * found.images[b].h - found.images[a].w * found.images[a].h));
@@ -135,15 +141,28 @@
   function change(f: () => void) { const before = snap(); f(); record(before); }
   function undo() { if (!past.length) return; future.push(snap()); objs = past.pop()!; canUndo = !!past.length; canRedo = true; keep(); }
   function redo() { if (!future.length) return; past.push(snap()); objs = future.pop()!; canRedo = !!future.length; canUndo = true; keep(); }
-  const keep = () => { if (!objs.some((o) => o.id === selected)) selected = null; };
+  const keep = () => { chosen = chosen.filter((k) => k.startsWith('line:') ? !liftedLine(+k.slice(5)) : k.startsWith('pic:') ? !liftedImage(+k.slice(4)) : objs.some((o) => o.id === k && !o.removed)); };
 
   const stateOf = (o: Obj) => { const { id, orig, ...rest } = $state.snapshot(o) as Obj; return JSON.stringify(rest); };
-  // choosing something else lets go of the last one: a lifted line or photo left as it was goes back to the page untouched
-  function select(id: string | null) {
-    if (id === selected) return;
-    const last = objs.find((o) => o.id === selected);
-    if (last && ((last.orig && last.orig === stateOf(last)) || (last.kind === 'text' && !last.from && !last.text.trim()))) objs = objs.filter((o) => o !== last);
-    selected = id;
+  function select(id: string | null) { if (chosen.length !== 1 || chosen[0] !== id) choose(id ? [id] : []); }
+  // choosing something else lets go of the last ones: a lifted line or photo left as it was goes back to the page untouched
+  function choose(keys: string[]) {
+    const gone = objs.filter((o) => isOn(o.id) && !keys.includes(o.id) && ((o.orig && o.orig === stateOf(o)) || (o.kind === 'text' && !o.from && !o.text.trim())));
+    if (gone.length) objs = objs.filter((o) => !gone.includes(o));
+    chosen = keys;
+    if (keys.length > 1 && document.activeElement instanceof HTMLTextAreaElement) document.activeElement.blur(); // Delete and the arrows now act on the selection
+  }
+  const toggle = (k: string) => choose(isOn(k) ? chosen.filter((x) => x !== k) : [...chosen, k]);
+  // what a box on the page touches: the page's lines and pictures, and the editor's objects (not deleted or hidden)
+  function touching(b: Box) {
+    const hit = (a: Box) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+    return [...found.lines.flatMap((l, i) => (!liftedLine(i) && hit(l) ? ['line:' + i] : [])), ...found.images.flatMap((p, i) => (!liftedImage(i) && hit(p) ? ['pic:' + i] : [])),
+      ...objs.filter((o) => !o.removed && !hidden[o.id] && hit(o)).map((o) => o.id)];
+  }
+  // the chosen page lines (unless `lines` is false) and pictures become editor objects; the selection keeps them by their new ids
+  function lift(lines = true): Obj[] {
+    chosen = chosen.map((k) => (k.startsWith('line:') && lines ? lineObj(+k.slice(5)).id : k.startsWith('pic:') ? addImage(+k.slice(4)).id : k));
+    return objs.filter((o) => isOn(o.id));
   }
 
   const rgb = (c: number[]) => `rgb(${c.map((v) => Math.round(v * 255)).join(' ')})`;
@@ -158,13 +177,36 @@
   function pageDown(e: PointerEvent) {
     if (e.target !== e.currentTarget && !(e.target as HTMLElement).matches('canvas')) return;
     if (tool === 'redact' || tool === 'move') { markArea(e); return; }
-    if (tool !== 'text') { select(null); return; }
+    if (tool !== 'text') { band(e); return; }
     // the box grows from the click towards the end of the line: rightwards in English, leftwards in Arabic
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect(), x = (e.clientX - r.left) / s, y = (e.clientY - r.top) / s, rtl = i18n.lang === 'ar';
     const w = Math.max(80, Math.min(260, rtl ? x - 8 : size.w - x - 8));
     const o: Obj = { id: uid(), kind: 'text', text: '', size: 16, color: COLOURS[1][1], bold: false, align: rtl ? 'right' : 'left', x: rtl ? Math.max(0, x - w) : x, y: y - 8, w, h: 16 * LEADING };
     e.preventDefault();
     change(() => objs.push(o)); select(o.id); tool = 'select'; focusText(o.id);
+  }
+  // Select: a drag on an empty spot draws a box that selects everything it touches (Ctrl / Shift / Select several add to the selection);
+  // a click there lets go. A finger draws one only in Select several (otherwise a tap lets go)
+  let area = $state<Box | null>(null);
+  function band(e: PointerEvent) {
+    const keys = e.ctrlKey || e.metaKey || e.shiftKey;
+    if (!keys && !several) choose([]);
+    if (e.pointerType === 'touch' && !several) return;
+    e.preventDefault();
+    const el = e.currentTarget as HTMLElement, r = el.getBoundingClientRect(), x0 = (e.clientX - r.left) / s, y0 = (e.clientY - r.top) / s, start = [...chosen];
+    el.setPointerCapture(e.pointerId);
+    const move = (ev: PointerEvent) => {
+      const x = (ev.clientX - r.left) / s, y = (ev.clientY - r.top) / s;
+      if (!area && Math.abs(x - x0) + Math.abs(y - y0) < 4 / s) return;
+      area = { x: Math.min(x0, x), y: Math.min(y0, y), w: Math.abs(x - x0), h: Math.abs(y - y0) };
+      chosen = [...new Set([...start, ...touching(area)])];
+    };
+    const up = () => {
+      el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up);
+      if (!area && several && !keys) choose([]); // Select several: a tap on an empty spot lets go
+      area = null;
+    };
+    el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
   }
   let coverWhite = $state(false); // the fill the next box gets: the last one chosen
   // Redact / Move area: drag a box over what should go (or move); it stays selected (move it, resize it, Delete takes it away)
@@ -183,7 +225,7 @@
     };
     const up = () => {
       el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up);
-      if (box.w < 4 || box.h < 4) { objs = objs.filter((x) => x.id !== o.id); selected = null; return; }
+      if (box.w < 4 || box.h < 4) { objs = objs.filter((x) => x.id !== o.id); chosen = []; return; }
       record(before);
       if (box.kind === 'redact' && box.white) coverText(box);
     };
@@ -196,12 +238,14 @@
   }
   // an existing line of text: a text box in its place, with its text, size, colour and weight; the box reaches the page
   // margin so a longer text stays on one line instead of wrapping onto the line below
-  function liftLine(i: number) {
-    const l = found.lines[i], id = uid(), w = Math.max(l.w, l.rtl ? l.x + l.w - 24 : size.w - l.x - 24);
-    const o: Obj = { id, kind: 'text', line: i, from: { x: l.x, y: l.y, w: l.w, h: l.h }, text: l.text, size: +l.size.toFixed(1), color: l.color, bold: l.bold, align: l.rtl ? 'right' : 'left',
+  function lineObj(i: number) {
+    const l = found.lines[i], w = Math.max(l.w, l.rtl ? l.x + l.w - 24 : size.w - l.x - 24);
+    const o: Obj = { id: uid(), kind: 'text', line: i, from: { x: l.x, y: l.y, w: l.w, h: l.h }, text: l.text, size: +l.size.toFixed(1), color: l.color, bold: l.bold, align: l.rtl ? 'right' : 'left',
       x: l.rtl ? l.x + l.w - w : l.x, y: l.base - BASELINE * l.size, w, h: l.h };
-    o.orig = stateOf(o); objs.push(o); select(id); focusText(id);
+    o.orig = stateOf(o); objs.push(o);
+    return objs[objs.length - 1];
   }
+  function liftLine(i: number) { const { id } = lineObj(i); select(id); focusText(id); }
   // the picture of a lifted photo alone (page-sized, transparent), for the box that follows the pointer
   let pics = $state<Record<number, string>>({});
   async function pictureOf(i: number) {
@@ -212,17 +256,19 @@
       pics[i] = URL.createObjectURL(await o.convertToBlob());
     } catch {}
   }
-  function liftImage(i: number) {
+  function addImage(i: number) {
     const b = found.images[i], o: Obj = { id: uid(), kind: 'image', index: i, from: { ...b }, ...b };
-    o.orig = stateOf(o); objs.push(o); select(o.id); pictureOf(i);
+    o.orig = stateOf(o); objs.push(o); pictureOf(i);
     return objs[objs.length - 1];
   }
+  function liftImage(i: number) { const o = addImage(i); select(o.id); return o; }
   const liftedLine = (i: number) => objs.some((o) => o.kind === 'text' && o.line === i);
   const liftedImage = (i: number) => objs.some((o) => o.kind === 'image' && o.index === i);
 
   // drag to move (the whole photo, or the bar above a text box); the corner resizes (photos keep their shape)
   function drag(e: PointerEvent, o: Obj, mode: 'move' | 'size', el = e.currentTarget as HTMLElement) {
     if (e.button !== 0) return;
+    if (mode === 'move' && (additive(e) || (chosen.length > 1 && isOn(o.id)))) { pressMany(e, o.id); return; }
     e.preventDefault(); e.stopPropagation(); select(o.id);
     const before = snap(), sx = e.clientX, sy = e.clientY, start = { x: o.x, y: o.y, w: o.w, h: o.h };
     let moved = false;
@@ -238,6 +284,33 @@
     const up = () => { el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up); if (moved) record(before); };
     el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
   }
+  // a press on something with several chosen, or with Ctrl / Shift / Select several: adds or removes it, or drags all chosen
+  // together (one undo step; lines and pictures of the page are lifted when the drag starts); a click without a drag chooses that one alone
+  let held = false; // the press was taken here: the text box under it does not take the focus
+  function pressMany(e: PointerEvent, k: string) {
+    e.preventDefault(); e.stopPropagation(); held = true;
+    if (additive(e)) { toggle(k); return; }
+    const el = sheet!, before = snap(), sx = e.clientX, sy = e.clientY;
+    let group: { o: Obj; x: number; y: number }[] | null = null;
+    el.setPointerCapture(e.pointerId);
+    const move = (ev: PointerEvent) => {
+      let dx = (ev.clientX - sx) / s, dy = (ev.clientY - sy) / s;
+      if (!group) { if (Math.abs(dx) + Math.abs(dy) < 3 / s) return; group = lift().map((o) => ({ o, x: o.x, y: o.y })); }
+      // each keeps at least 16 points on the page, like a single drag
+      dx = Math.min(...group.map((g) => size.w - 16 - g.x), Math.max(...group.map((g) => 16 - g.o.w - g.x), dx));
+      dy = Math.min(...group.map((g) => size.h - 16 - g.y), Math.max(...group.map((g) => 16 - g.o.h - g.y), dy));
+      for (const g of group) { g.o.x = g.x + dx; g.o.y = g.y + dy; }
+    };
+    const up = () => {
+      el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up);
+      if (group) record(before);
+      else if (k.startsWith('line:')) liftLine(+k.slice(5));
+      else if (k.startsWith('pic:')) liftImage(+k.slice(4));
+      else { select(k); focusText(k); }
+    };
+    el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+  }
+  function nudge(dx: number, dy: number) { const before = snap(); for (const o of lift()) { o.x += dx; o.y += dy; } record(before); }
 
   // typing is one undo step per visit to the text box
   let typing: Obj[] | null = null;
@@ -252,15 +325,17 @@
   }
   function typed(o: Obj) { if (typing && JSON.stringify(typing.find((x) => x.id === o.id)) !== JSON.stringify($state.snapshot(o))) record(typing); typing = null; }
 
+  // everything chosen goes in one undo step; a line of the page is taken out of the PDF for good (editpage.ts redacts its text)
   function remove() {
-    const o = sel;
-    if (!o) return;
+    if (!chosen.length) return;
     change(() => {
-      if (o.kind === 'image') o.removed = true; // stays an edit: the photo is taken off the page
-      else if (o.kind === 'text' && o.from) { o.removed = true; o.text = ''; }
-      else objs = objs.filter((x) => x.id !== o.id);
+      for (const o of lift()) {
+        if (o.kind === 'image') o.removed = true; // stays an edit: the photo is taken off the page
+        else if (o.kind === 'text' && o.from) { o.removed = true; o.text = ''; }
+        else objs = objs.filter((x) => x.id !== o.id);
+      }
     });
-    selected = null;
+    chosen = [];
   }
 
   // layers: the objects that are drawn on the page, in the order of `objs` (the last one is in front; saved as `z`). Front first in the list,
@@ -279,19 +354,23 @@
       const first = o.kind === 'text' ? o.text.trim().split(/\s+/).slice(0, 4).join(' ') : '';
       return { key: o.id, o, name: first ? t('layerText').replace('{text}', first) : t('layerTextBox'), icon: 'text' };
     }),
-    ...found.images.map((_, i) => i).filter((i) => !liftedImage(i)).map((i): Row => ({ key: 'p' + i, image: i, name: t('layerPicture').replace('{n}', String(i + 1)), ...(pics[i] ? { style: thumb(pics[i], found.images[i]) } : { icon: 'images' }) })),
+    ...found.images.map((_, i) => i).filter((i) => !liftedImage(i)).map((i): Row => ({ key: 'pic:' + i, image: i, name: t('layerPicture').replace('{n}', String(i + 1)), ...(pics[i] ? { style: thumb(pics[i], found.images[i]) } : { icon: 'images' }) })),
   ]);
   $effect(() => { if (doc >= 0 && s) found.images.slice(0, 24).forEach((_, i) => pictureOf(i)); }); // the pictures of the list
-  const listed = $derived(objs.filter(listable)), at = $derived(listed.findIndex((o) => o.id === selected));
+  // the order buttons act on every chosen layer; a chosen picture of the page not lifted yet is lifted first (it then counts as in front)
+  const listed = $derived(objs.filter(listable)), pending = $derived(chosen.some((k) => k.startsWith('pic:')));
+  const canUp = $derived(pending || listed.some((o, i) => isOn(o.id) && listed.slice(i + 1).some((x) => !isOn(x.id))));
+  const canDown = $derived(pending || listed.some((o, i) => isOn(o.id) && listed.slice(0, i).some((x) => !isOn(x.id))));
   const ORDER = [['front', 'to-front', 'toFront'], ['forward', 'forward', 'layerForward'], ['backward', 'backward', 'layerBackward'], ['back', 'to-back', 'toBack']] as const;
-  function stack(to: 'front' | 'forward' | 'backward' | 'back') {
-    const o = sel;
-    if (!o || at < 0) return;
-    const rest = objs.filter((x) => x !== o), next = to === 'forward' ? listed[at + 1] : to === 'backward' ? listed[at - 1] : null;
-    const i = to === 'front' ? rest.length : to === 'back' ? 0 : rest.indexOf(next!) + (to === 'forward' ? 1 : 0);
-    change(() => { o.orig = undefined; objs = [...rest.slice(0, i), o, ...rest.slice(i)]; }); // no longer "left as it was": the new order is kept
+  function stack(to: To) {
+    const before = snap(), on = (o: Obj) => isOn(o.id) && listable(o);
+    lift(false);
+    const next = restack(objs, listable, on, to);
+    if (next.every((o, i) => o === objs[i])) return;
+    next.filter(on).forEach((o) => (o.orig = undefined)); // no longer "left as it was": the new order is kept
+    objs = next; record(before);
   }
-  function pick(r: Row) { tool = 'select'; if (r.o) select(r.o.id); else liftImage(r.image!); }
+  function pick(r: Row, e: MouseEvent) { tool = 'select'; if (additive(e)) toggle(r.key); else if (r.o) select(r.o.id); else liftImage(r.image!); }
 
   // photos: a new one in the middle of the page, or a replacement in the selected photo's place
   let picker: HTMLInputElement, replacing = false;
@@ -339,7 +418,13 @@
     const k = e.key.toLowerCase();
     if ((e.ctrlKey || e.metaKey) && k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
     else if ((e.ctrlKey || e.metaKey) && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
-    else if ((e.key === 'Delete' || e.key === 'Backspace') && sel) { e.preventDefault(); remove(); }
+    else if ((e.ctrlKey || e.metaKey) && k === 'a' && doc >= 0) { e.preventDefault(); tool = 'select'; choose(touching({ x: -1e5, y: -1e5, w: 2e5, h: 2e5 })); }
+    else if ((e.key === 'Delete' || e.key === 'Backspace') && chosen.length) { e.preventDefault(); remove(); }
+    else if (e.key.startsWith('Arrow') && chosen.length) { // a nudge: 1 point, Shift 10
+      e.preventDefault();
+      const d = e.shiftKey ? 10 : 1;
+      nudge(e.key === 'ArrowLeft' ? -d : e.key === 'ArrowRight' ? d : 0, e.key === 'ArrowUp' ? -d : e.key === 'ArrowDown' ? d : 0);
+    }
     else if (e.key === 'Escape') { tool = 'select'; select(null); }
   }
 </script>
@@ -358,7 +443,7 @@
     <span class="sep"></span>
     <button class="btn icon" onclick={undo} disabled={!canUndo} title={t('undo')} aria-label={t('undo')}>{@html icon('undo')}</button>
     <button class="btn icon" onclick={redo} disabled={!canRedo} title={t('redo')} aria-label={t('redo')}><span class="flip">{@html icon('undo')}</span></button>
-    <button class="btn icon" onclick={remove} disabled={!sel} title={t('delete')} aria-label={t('delete')}>{@html icon('delete')}</button>
+    <button class="btn icon" onclick={remove} disabled={!chosen.length} title={t('delete')} aria-label={t('delete')}>{@html icon('delete')}</button>
     {#if !view.narrow}
     <label class="zoomer"><span class="sr">{t('zoom')}</span><select bind:value={zoom} aria-label={t('zoom')}>
       <option value={0}>{t('zoomFit')}</option>{#each ZOOMS as z}<option value={z}>{Math.round(z * 100)}%</option>{/each}
@@ -378,25 +463,31 @@
           <canvas bind:this={canvas} style="width:{size.w * s}px;height:{size.h * s}px"></canvas>
           {#if tool === 'select' && doc >= 0}
             {#each byArea as i}{@const b = found.images[i]}{#if !liftedImage(i)}
-              <button class="hit photo" style="left:{b.x * s}px;top:{b.y * s}px;width:{b.w * s}px;height:{b.h * s}px" aria-label="{t('changePhoto')} {i + 1}" onpointerdown={(e) => { if (e.button === 0) drag(e, liftImage(i), 'move', sheet); }}></button>
+              <button class="hit photo" class:on={isOn('pic:' + i)} style="left:{b.x * s}px;top:{b.y * s}px;width:{b.w * s}px;height:{b.h * s}px" aria-label="{t('changePhoto')} {i + 1}" aria-pressed={isOn('pic:' + i)}
+                onpointerdown={(e) => { if (e.button !== 0) return; if (additive(e) || (chosen.length > 1 && isOn('pic:' + i))) pressMany(e, 'pic:' + i); else drag(e, liftImage(i), 'move', sheet); }}></button>
             {/if}{/each}
             {#each found.lines as l, i}{#if !liftedLine(i)}
-              <button class="hit line" style="left:{l.x * s}px;top:{l.y * s}px;width:{l.w * s}px;height:{l.h * s}px" aria-label="{t('changeText')}: {l.text}" onpointerdown={(e) => { e.stopPropagation(); e.preventDefault(); liftLine(i); }}></button>
+              <button class="hit line" class:on={isOn('line:' + i)} style="left:{l.x * s}px;top:{l.y * s}px;width:{l.w * s}px;height:{l.h * s}px" aria-label="{t('changeText')}: {l.text}" aria-pressed={isOn('line:' + i)}
+                onpointerdown={(e) => { if (additive(e) || (chosen.length > 1 && isOn('line:' + i))) { pressMany(e, 'line:' + i); return; } e.stopPropagation(); e.preventDefault(); liftLine(i); }}></button>
             {/if}{/each}
           {/if}
+          {#if area}<div class="band" style="left:{area.x * s}px;top:{area.y * s}px;width:{area.w * s}px;height:{area.h * s}px"></div>{/if}
           {#each objs as o (o.id)}
             {#if !o.removed}
               {#if o.kind === 'text'}
-                <div class="obj text" class:on={o.id === selected} class:hid={hidden[o.id]} data-obj={o.id} style="left:{o.x * s}px;top:{o.y * s}px;width:{o.w * s}px">
+                <!-- svelte-ignore a11y_no_static_element_interactions (Ctrl+click and dragging several; the text box inside takes the keyboard) -->
+                <div class="obj text" class:on={isOn(o.id)} class:hid={hidden[o.id]} data-obj={o.id} style="left:{o.x * s}px;top:{o.y * s}px;width:{o.w * s}px"
+                  onpointerdowncapture={(e) => { held = false; if (e.button === 0 && (additive(e) || (chosen.length > 1 && isOn(o.id)))) pressMany(e, o.id); }}>
                   {#if o.id === selected}<div class="grip" title={t('moveHandle')} onpointerdown={(e) => drag(e, o, 'move')}></div>{/if}
                   <textarea bind:value={o.text} dir="auto" rows="1" spellcheck="false" placeholder={t('typeHere')} aria-label={t('textOptions')}
                     style="font-family:{family(o)};font-size:{o.size * s}px;font-weight:{o.bold ? 700 : 400};color:{rgb(o.color)};text-align:{o.align};line-height:{LEADING};transform:translateY({shift[o.bold ? 1 : 0] * o.size * s}px)"
-                    oninput={() => direction(o)} onfocus={() => { select(o.id); typing = snap(); }} onblur={() => typed(o)}></textarea>
+                    onmousedown={(e) => { if (held) { held = false; e.preventDefault(); } }}
+                    oninput={() => direction(o)} onfocus={() => { if (!isOn(o.id) || chosen.length === 1) select(o.id); typing = snap(); }} onblur={() => typed(o)}></textarea>
                   {#if o.id === selected}<div class="corner" title={t('resizeHandle')} onpointerdown={(e) => drag(e, o, 'size')}></div>{/if}
                 </div>
               {:else}
                 <!-- svelte-ignore a11y_no_static_element_interactions (moved with the pointer; Delete and the options panel work from the keyboard) -->
-                <div class="obj pic" class:redact={o.kind === 'redact'} class:area={o.kind === 'move'} class:white={o.kind === 'redact' && o.white} class:hid={hidden[o.id]} class:on={o.id === selected} data-obj={o.id} style="left:{o.x * s}px;top:{o.y * s}px;width:{o.w * s}px;height:{o.h * s}px;{picture(o)}"
+                <div class="obj pic" class:redact={o.kind === 'redact'} class:area={o.kind === 'move'} class:white={o.kind === 'redact' && o.white} class:hid={hidden[o.id]} class:on={isOn(o.id)} data-obj={o.id} style="left:{o.x * s}px;top:{o.y * s}px;width:{o.w * s}px;height:{o.h * s}px;{picture(o)}"
                   onpointerdown={(e) => drag(e, o, 'move')}>
                   {#if (o.kind === 'image' || o.kind === 'photo') && o.photo != null}<img src={urls[o.photo]} alt="" draggable="false" />{/if}
                   {#if o.id === selected && o.kind !== 'move'}<div class="corner" title={t('resizeHandle')} onpointerdown={(e) => drag(e, o, 'size')}></div>{/if}
@@ -411,8 +502,10 @@
     {#if view.narrow}
       <Sheet label={t('options')} bind:open={sheetOpen}>
         {#snippet bar()}
-          <button class="btn" onclick={onCancel} disabled={!!busy && doc >= 0}>{t('cancel')}</button>
-          <button class="btn primary" onclick={save} disabled={!!busy}>{@html icon('check')}{t('savePage')}</button>
+          <button class="btn" class:on={several} aria-pressed={several} onclick={() => (several = !several)}>{t('selectSeveral')}</button>
+          <button class="btn icon" onclick={onCancel} disabled={!!busy && doc >= 0} title={t('cancel')} aria-label={t('cancel')}>{@html icon('close')}</button>
+          <!-- Cancel as an icon and Save page without one: Select several, Cancel and Save page fit a phone's dock -->
+          <button class="btn primary" onclick={save} disabled={!!busy}>{t('savePage')}</button>
         {/snippet}
         {@render panel()}
       </Sheet>
@@ -478,6 +571,10 @@
         <p class="help">{t('photoHelp')}</p>
         <button class="btn" onclick={() => choosePhoto(true)}>{@html icon('images')}{t('replacePhoto')}</button>
         <button class="btn" onclick={remove}>{@html icon('delete')}{t('delete')}</button>
+      {:else if chosen.length}
+        <h2 class="num" data-testid="many">{t('nSelected').replace('{n}', String(chosen.length))}</h2>
+        <p class="help">{t('manyHelp')}</p>
+        <button class="btn" onclick={remove}>{@html icon('delete')}{t('delete')}</button>
       {:else}
         <h2>{t('editPage')}</h2>
         <p class="help">{tool === 'text' ? t('placeText') : tool === 'redact' ? t('placeRedact') : tool === 'move' ? t('placeMove') : t('editorHelp')}</p>
@@ -491,15 +588,15 @@
         </div>
         <div class="order" role="group" aria-label={t('layerOrder')}>
           {#each ORDER as [to, ic, label]}
-            <button class="btn icon" onclick={() => stack(to)} disabled={to === 'front' || to === 'forward' ? !(at >= 0 && at < listed.length - 1) : !(at > 0)} title={t(label)} aria-label={t(label)}>{@html icon(ic)}</button>
+            <button class="btn icon" onclick={() => stack(to)} disabled={to === 'front' || to === 'forward' ? !canUp : !canDown} title={t(label)} aria-label={t(label)}>{@html icon(ic)}</button>
           {/each}
         </div>
         {#if rows.length}
           <ul class="list" aria-label={t('layerList')}>
             {#each rows as r (r.key)}
               {@const off = !!r.o && !!hidden[r.o.id]}
-              <li class:on={!!r.o && r.o.id === selected} class:off>
-                <button class="pick" aria-pressed={!!r.o && r.o.id === selected} title={r.name} onclick={() => pick(r)}>
+              <li class:on={isOn(r.key)} class:off>
+                <button class="pick" aria-pressed={isOn(r.key)} title={r.name} onclick={(e) => pick(r, e)}>
                   <span class="thumb" class:white={r.white} style={r.style}>{#if r.img}<img src={r.img} alt="" draggable="false" />{:else if r.icon}{@html icon(r.icon)}{/if}</span>
                   <bdi class="name">{r.name}</bdi>
                 </button>
@@ -535,6 +632,8 @@
   .hit { position: absolute; padding: 0; border: 1px solid transparent; border-radius: 2px; background: transparent; cursor: pointer; }
   .hit:hover, .hit:focus-visible { border-color: var(--green); background: var(--select-tint); }
   .hit.line { cursor: text; }
+  .hit.on { border-color: var(--green); background: var(--select-tint); outline: 2px dashed var(--green); outline-offset: 2px; }
+  .band { position: absolute; z-index: 2; border: 1px solid var(--green); background: var(--select-tint); pointer-events: none; }
   .obj { position: absolute; }
   .obj.redact { border: 2px dashed var(--danger); }
   .obj.area { border: 1px solid var(--green); }
