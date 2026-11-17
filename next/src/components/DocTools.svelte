@@ -21,8 +21,9 @@
   import { CONVERTIBLE_ACCEPT, desktop, toPdf } from '../lib/convert';
   import { zip } from '../lib/zip';
   import { addUnique } from '../lib/names';
+  import type { ToolId } from '../lib/quicktools';
 
-  let { pool, kind, sizes, name, bytes, password, onReplace, onGoto }: { pool: EnginePool; kind: 'stamp' | 'convert' | 'protect';
+  let { pool, kind, at, sizes, name, bytes, password, onReplace, onGoto }: { pool: EnginePool; kind: 'stamp' | 'convert' | 'protect'; at?: ToolId;
     sizes: { w: number; h: number }[]; name: string; bytes: Uint8Array; password?: string; onReplace: (bytes: Uint8Array, password?: string, task?: 'protect') => Promise<void>; onGoto?: (page: number) => void } = $props();
   const base = $derived(name.replace(/\.pdf$/i, ''));
   let busy = $state(''), note = $state(''), error = $state('');
@@ -109,7 +110,10 @@
   // Fix all: one fix at a time (each one opens the document again and checks it again), then the next in the queue
   const next = async (): Promise<void> => { const f = issues.find((x) => x.id === queue.shift()); if (f) await mend(f); else if (queue.length) await next(); };
   const fixAll = () => { queue = fixable.map((f) => f.id); return next(); };
+  // a quick tool from the start screen: Protect starts in the password field, Unlock is scrolled into view
+  let pwField = $state<HTMLInputElement>(), unlockHead = $state<HTMLElement>();
   onMount(() => {
+    if (at === 'protect') pwField?.focus(); else if (at === 'unlock') unlockHead?.scrollIntoView({ block: 'start' });
     if (after && kind === 'protect') { const msg = after; after = ''; scan().then(() => { note = msg; if (queue.length) next(); }); }
     else { after = ''; if (seen?.key === key()) report = seen.report; }
   });
@@ -202,13 +206,13 @@
       {:else}
       <h2>{t('protectTitle')}</h2>
       <p class="help">{t('protectHelp')}</p>
-      <label class="field"><span>{t('password')}</span><input type="password" bind:value={pw} autocomplete="new-password" /></label>
+      <label class="field"><span>{t('password')}</span><input type="password" bind:value={pw} bind:this={pwField} autocomplete="new-password" /></label>
       <label class="field"><span>{t('passwordAgain')}</span><input type="password" bind:value={pw2} autocomplete="new-password" /></label>
       {#if pw.includes(',')}<p class="error">{t('noComma')}</p>{/if}
       <label class="switch"><input type="checkbox" bind:checked={print} />{t('allowPrint')}</label>
       <label class="switch"><input type="checkbox" bind:checked={copy} />{t('allowCopy')}</label>
       <button class="btn" onclick={lock} disabled={!!busy || !pwOk}>{@html icon('protect')}{t('protectSave')}</button>
-      <h2>{t('unlockTitle')}</h2>
+      <h2 bind:this={unlockHead}>{t('unlockTitle')}</h2>
       {#if password}
         <p class="help">{t('unlockHelp')}</p>
         <button class="btn" onclick={free} disabled={!!busy}>{@html icon('unlock')}{t('unlockApply')}</button>

@@ -15,8 +15,11 @@
   import CropPanel from './CropPanel.svelte';
   import { zip } from '../lib/zip';
   import { addUnique } from '../lib/names';
+  import type { ToolId } from '../lib/quicktools';
 
-  let { pool, sizes, name, extra = [], changed = $bindable(false) }: { pool: EnginePool; sizes: { w: number; h: number }[]; name: string; extra?: File[]; changed?: boolean } = $props();
+  let { pool, sizes, name, extra = [], at, changed = $bindable(false) }: { pool: EnginePool; sizes: { w: number; h: number }[]; name: string; extra?: File[]; at?: ToolId; changed?: boolean } = $props();
+  // a quick tool from the start screen: a short hint (rotate, delete pages) or the split panel open
+  const hint = $derived(at === 'rotate' ? t('qtRotateHint') : at === 'delete-pages' ? t('qtDeleteHint') : '');
 
   // svelte-ignore state_referenced_locally (one Organize per opened document)
   let groups = $state<Group[]>([{ id: 'doc', items: sizes.map((s, page) => ({ id: uid(), doc: 0, page, rotate: 0, w: s.w, h: s.h })) }]);
@@ -77,7 +80,8 @@
   }
 
   // side panels: Split (into several files, saved together as one ZIP) and Crop
-  let panel = $state<'split' | 'crop' | null>(null), splitBy = $state<'every' | 'selected' | 'each'>('every'), every = $state(1);
+  // svelte-ignore state_referenced_locally
+  let panel = $state<'split' | 'crop' | null>(at === 'split' ? 'split' : null), splitBy = $state<'every' | 'selected' | 'each'>('every'), every = $state(1);
   const parts = $derived.by(() => {
     const list = groups[0].items;
     if (splitBy === 'each') return list.map((x) => [x]);
@@ -149,6 +153,7 @@
     {@render toolButtons()}
   </div>
   {/if}
+  {#if hint}<p class="hint" role="status">{@html icon('info')}{hint}</p>{/if}
   <div class="main" class:withpanel={!!panel}>
     <PageGrid {pool} {groups} {selected} bind:size min={view.phone ? 64 : 96} number={(_, n) => String(n + 1)} onchange={change} oninsert={(_, i) => insert(i)}
       onfiles={(files, _, i) => insertFiles(files, i)} onopen={(it) => (editing = it)} />
@@ -182,6 +187,9 @@
 
 <style>
   .org { height: 100%; display: grid; grid-template-rows: auto 1fr; min-height: 0; }
+  .org:has(> .hint) { grid-template-rows: auto auto 1fr; }
+  .hint { display: flex; align-items: center; gap: var(--s-8); margin: 0; padding: var(--s-8) var(--s-16); background: var(--green-soft); border-bottom: 1px solid var(--line); }
+  .hint :global(svg) { flex: none; width: 18px; height: 18px; color: var(--green); }
   .main { display: grid; grid-template-columns: 1fr; min-height: 0; }
   .main.withpanel { grid-template-columns: 1fr auto; }
   .btn.on { background: var(--green-soft); border-color: var(--green); }
@@ -201,6 +209,7 @@
   .sheettools { padding: 0; border: 0; background: none; }
   @media (max-width: 820px) {
     .org { grid-template-rows: 1fr; }
+    .org:has(> .hint) { grid-template-rows: auto 1fr; }
     .main { padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
     .main.withpanel { grid-template-columns: 1fr; }
     .main.withpanel > :global(aside) { position: fixed; z-index: 31; inset-inline: 0; bottom: calc(64px + env(safe-area-inset-bottom, 0px)); width: auto; max-height: 60dvh; border-top: 1px solid var(--line); border-inline-start: 0; box-shadow: 0 -8px 24px rgb(0 0 0 / .16); }
